@@ -10,6 +10,8 @@
     - name: 'Set Known Facts'
       set_fact:
         pgrole: 'sim-migrations'
+        intport: '80'
+        extport: '80'
         image: 'ghcr.io/simstudioai/migrations:latest'
         postgres_user: 'postgres'
         postgres_password: 'postgres'
