@@ -9,7 +9,7 @@
     # FACTS #######################################################################
     - name: 'Set Known Facts'
       set_fact:
-        pgrole: 'sim-ollama'
+        pgrole: 'ollama'
         pgrole_realtime: 'sim-realtime'
         pgrole_migrations: 'sim-migrations'
         pgrole_db: 'sim-db'

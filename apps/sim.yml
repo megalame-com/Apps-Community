@@ -13,7 +13,7 @@
         pgrole_realtime: 'sim-realtime'
         pgrole_migrations: 'sim-migrations'
         pgrole_db: 'sim-db'
-        pgrole_ollama: 'sim-ollama'
+        pgrole_ollama: 'ollama'
         intport: '3000'
         extport: '3000'
         intport2: '3002'
