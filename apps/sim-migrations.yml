@@ -1,0 +1,50 @@
+#!/bin/bash
+# Author(s):  MHA-Team
+# GNU:        General Public License v3.0
+################################################################################
+---
+- hosts: localhost
+  gather_facts: false
+  tasks:
+    # FACTS #######################################################################
+    - name: 'Set Known Facts'
+      set_fact:
+        pgrole: 'sim-migrations'
+        image: 'ghcr.io/simstudioai/migrations:latest'
+        postgres_user: 'postgres'
+        postgres_password: 'postgres'
+        postgres_db: 'simstudio'
+
+    # CORE (MANDATORY) ############################################################
+    - name: 'Including cron job'
+      include_tasks: '/opt/communityapps/apps/_core.yml'
+
+    - name: 'Setting {{pgrole}} ENV'
+      set_fact:
+        pg_env:
+          DATABASE_URL: 'postgresql://{{postgres_user}}:{{postgres_password}}@sim-db:5432/{{postgres_db}}'
+
+    # MAIN DEPLOYMENT #############################################################
+    - name: 'Removing old {{pgrole}} container'
+      docker_container:
+        name: '{{pgrole}}'
+        state: absent
+
+    - name: 'Running {{pgrole}}'
+      docker_container:
+        name: '{{pgrole}}'
+        image: '{{image}}'
+        pull: yes
+        working_dir: '/app/packages/db'
+        command: 'bun run db:migrate'
+        env: '{{pg_env}}'
+        restart_policy: 'no'
+        detach: false
+        cleanup: true
+        networks:
+          - name: plexguide
+            aliases:
+              - '{{pgrole}}'
+        state: started
+
+##PG-Community

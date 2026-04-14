@@ -9,10 +9,10 @@
     # FACTS #######################################################################
     - name: 'Set Known Facts'
       set_fact:
-        pgrole: 'sim'
-        intport: '3000'
-        extport: '3000'
-        image: 'ghcr.io/simstudioai/simstudio:latest'
+        pgrole: 'sim-realtime'
+        intport: '3002'
+        extport: '3002'
+        image: 'ghcr.io/simstudioai/realtime:latest'
         postgres_user: 'postgres'
         postgres_password: 'postgres'
         postgres_db: 'simstudio'
@@ -21,32 +21,9 @@
     - name: 'Including cron job'
       include_tasks: '/opt/communityapps/apps/_core.yml'
 
-    # LABELS ######################################################################
-    - name: 'Adding Traefik'
-      set_fact:
-        pg_labels:
-          traefik.enable: 'true'
-          traefik.port: '{{intport}}'
-          traefik.frontend.auth.forward.address: '{{gauth}}'
-          traefik.frontend.rule: 'Host:{{pgrole}}.{{domain.stdout}}{{tldset}}{{cname}}'
-          traefik.frontend.headers.SSLHost: '{{domain.stdout}}'
-          traefik.frontend.headers.SSLRedirect: 'true'
-          traefik.frontend.headers.STSIncludeSubdomains: 'true'
-          traefik.frontend.headers.STSPreload: 'true'
-          traefik.frontend.headers.STSSeconds: '315360000'
-          traefik.frontend.headers.browserXSSFilter: 'true'
-          traefik.frontend.headers.contentTypeNosniff: 'true'
-          traefik.frontend.headers.customResponseHeaders: 'X-Robots-Tag:noindex,nofollow,nosnippet,noarchive,notranslate,noimageindex'
-          traefik.frontend.headers.forceSTSHeader: 'true'
-
     - name: 'Generating better-auth secret'
       set_fact:
         sim_better_auth_secret: "{{ lookup('password', '/opt/appdata/sim/.better_auth_secret length=64 chars=hex') }}"
-      no_log: true
-
-    - name: 'Generating encryption key'
-      set_fact:
-        sim_encryption_key: "{{ lookup('password', '/opt/appdata/sim/.encryption_key length=64 chars=hex') }}"
       no_log: true
 
     - name: 'Generating internal API secret'
@@ -59,19 +36,11 @@
         pg_env:
           NODE_ENV: 'production'
           DATABASE_URL: 'postgresql://{{postgres_user}}:{{postgres_password}}@sim-db:5432/{{postgres_db}}'
-          BETTER_AUTH_URL: 'https://{{pgrole}}.{{domain.stdout}}'
-          NEXT_PUBLIC_APP_URL: 'https://{{pgrole}}.{{domain.stdout}}'
+          NEXT_PUBLIC_APP_URL: 'https://sim.{{domain.stdout}}'
+          BETTER_AUTH_URL: 'https://sim.{{domain.stdout}}'
           BETTER_AUTH_SECRET: '{{sim_better_auth_secret}}'
-          ENCRYPTION_KEY: '{{sim_encryption_key}}'
-          API_ENCRYPTION_KEY: ''
           INTERNAL_API_SECRET: '{{sim_internal_api_secret}}'
           REDIS_URL: ''
-          COPILOT_API_KEY: ''
-          SIM_AGENT_API_URL: ''
-          OLLAMA_URL: 'http://ollama:11434'
-          SOCKET_SERVER_URL: 'http://sim-realtime:3002'
-          NEXT_PUBLIC_SOCKET_URL: 'https://{{pgrole}}.{{domain.stdout}}'
-          ADMISSION_GATE_MAX_INFLIGHT: '500'
 
     # MAIN DEPLOYMENT #############################################################
     - name: 'Deploying {{pgrole}}'
@@ -82,13 +51,13 @@
         published_ports:
           - '{{ports.stdout}}{{extport}}:{{intport}}'
         env: '{{pg_env}}'
-        memory: '8G'
+        memory: '1G'
         restart_policy: unless-stopped
         networks:
           - name: plexguide
             aliases:
               - '{{pgrole}}'
+              - 'sim-realtime'
         state: started
-        labels: '{{pg_labels}}'
 
 ##PG-Community
