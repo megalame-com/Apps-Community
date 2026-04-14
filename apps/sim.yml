@@ -13,7 +13,7 @@
         pgrole_realtime: 'sim-realtime'
         pgrole_migrations: 'sim-migrations'
         pgrole_db: 'sim-db'
-        pgrole_ollama: 'ollama'
+        pgrole_ollama: 'sim-ollama'
         intport: '3000'
         extport: '3000'
         intport2: '3002'
@@ -89,7 +89,7 @@
           SIM_AGENT_API_URL: ''
           OLLAMA_URL: 'http://{{pgrole_ollama}}:{{extport4}}'
           SOCKET_SERVER_URL: 'http://realtime:3002'
-          NEXT_PUBLIC_SOCKET_URL: 'https://{{pgrole}}.{{domain.stdout}}'
+          NEXT_PUBLIC_SOCKET_URL: 'https://{{pgrole}}.{{domain.stdout}}{{tldset}}{{cname}}'
           ADMISSION_GATE_MAX_INFLIGHT: '500'
 
     - name: 'Setting {{pgrole_realtime}} ENV'
@@ -97,8 +97,8 @@
         pg_env_realtime:
           NODE_ENV: 'production'
           DATABASE_URL: 'postgresql://{{postgres_user}}:{{postgres_password}}@db:5432/{{postgres_db}}'
-          NEXT_PUBLIC_APP_URL: 'https://{{pgrole}}.{{domain.stdout}}'
-          BETTER_AUTH_URL: 'https://{{pgrole}}.{{domain.stdout}}'
+          NEXT_PUBLIC_APP_URL: 'https://{{pgrole}}.{{domain.stdout}}{{tldset}}{{cname}}'
+          BETTER_AUTH_URL: 'https://{{pgrole}}.{{domain.stdout}}{{tldset}}{{cname}}'
           BETTER_AUTH_SECRET: '{{sim_better_auth_secret}}'
           INTERNAL_API_SECRET: '{{sim_internal_api_secret}}'
           REDIS_URL: ''
