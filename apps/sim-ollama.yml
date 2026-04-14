@@ -1,0 +1,286 @@
+#!/bin/bash
+# Author(s):  MHA-Team
+# GNU:        General Public License v3.0
+################################################################################
+---
+- hosts: localhost
+  gather_facts: false
+  tasks:
+    # FACTS #######################################################################
+    - name: 'Set Known Facts'
+      set_fact:
+        pgrole: 'sim'
+        pgrole_realtime: 'sim-realtime'
+        pgrole_migrations: 'sim-migrations'
+        pgrole_db: 'sim-db'
+        pgrole_ollama: 'sim-ollama'
+        intport: '3000'
+        extport: '3000'
+        intport2: '3002'
+        extport2: '3002'
+        intport3: '5432'
+        extport3: '5432'
+        intport4: '11434'
+        extport4: '11434'
+        image: 'ghcr.io/simstudioai/simstudio:latest'
+        image2: 'ghcr.io/simstudioai/realtime:latest'
+        image3: 'ghcr.io/simstudioai/migrations:latest'
+        image4: 'pgvector/pgvector:pg17'
+        image5: 'ollama/ollama:latest'
+        postgres_user: 'postgres'
+        postgres_password: 'postgres'
+        postgres_db: 'simstudio'
+        sim_ollama_profile: 'cpu'
+
+    # CORE (MANDATORY) ############################################################
+    - name: 'Including cron job'
+      include_tasks: '/opt/communityapps/apps/_core.yml'
+
+    # LABELS ######################################################################
+    - name: 'Adding Traefik'
+      set_fact:
+        pg_labels:
+          traefik.enable: 'true'
+          traefik.port: '{{intport}}'
+          traefik.frontend.auth.forward.address: '{{gauth}}'
+          traefik.frontend.rule: 'Host:{{pgrole}}.{{domain.stdout}}{{tldset}}{{cname}}'
+          traefik.frontend.headers.SSLHost: '{{domain.stdout}}'
+          traefik.frontend.headers.SSLRedirect: 'true'
+          traefik.frontend.headers.STSIncludeSubdomains: 'true'
+          traefik.frontend.headers.STSPreload: 'true'
+          traefik.frontend.headers.STSSeconds: '315360000'
+          traefik.frontend.headers.browserXSSFilter: 'true'
+          traefik.frontend.headers.contentTypeNosniff: 'true'
+          traefik.frontend.headers.customResponseHeaders: 'X-Robots-Tag:noindex,nofollow,nosnippet,noarchive,notranslate,noimageindex'
+          traefik.frontend.headers.forceSTSHeader: 'true'
+
+    - name: 'Setting {{pgrole_db}} Volumes'
+      set_fact:
+        pg_volumes_db:
+          - '/opt/appdata/{{pgrole}}/postgres:/var/lib/postgresql/data'
+          - '/etc/localtime:/etc/localtime:ro'
+
+    - name: 'Setting {{pgrole_ollama}} Volumes'
+      set_fact:
+        pg_volumes_ollama:
+          - '/opt/appdata/{{pgrole}}/ollama:/root/.ollama'
+          - '/etc/localtime:/etc/localtime:ro'
+
+    - name: 'Generating better-auth secret'
+      set_fact:
+        sim_better_auth_secret: "{{ lookup('password', '/opt/appdata/sim/.better_auth_secret length=64 chars=hex') }}"
+      no_log: true
+
+    - name: 'Generating encryption key'
+      set_fact:
+        sim_encryption_key: "{{ lookup('password', '/opt/appdata/sim/.encryption_key length=64 chars=hex') }}"
+      no_log: true
+
+    - name: 'Generating internal API secret'
+      set_fact:
+        sim_internal_api_secret: "{{ lookup('password', '/opt/appdata/sim/.internal_api_secret length=64 chars=hex') }}"
+      no_log: true
+
+    - name: 'Setting {{pgrole}} ENV'
+      set_fact:
+        pg_env:
+          NODE_ENV: 'production'
+          DATABASE_URL: 'postgresql://{{postgres_user}}:{{postgres_password}}@db:5432/{{postgres_db}}'
+          BETTER_AUTH_URL: 'https://{{pgrole}}.{{domain.stdout}}{{tldset}}{{cname}}'
+          NEXT_PUBLIC_APP_URL: 'https://{{pgrole}}.{{domain.stdout}}{{tldset}}{{cname}}'
+          BETTER_AUTH_SECRET: '{{sim_better_auth_secret}}'
+          ENCRYPTION_KEY: '{{sim_encryption_key}}'
+          API_ENCRYPTION_KEY: ''
+          INTERNAL_API_SECRET: '{{sim_internal_api_secret}}'
+          REDIS_URL: ''
+          COPILOT_API_KEY: ''
+          SIM_AGENT_API_URL: ''
+          OLLAMA_URL: 'http://ollama:11434'
+          SOCKET_SERVER_URL: 'http://realtime:3002'
+          NEXT_PUBLIC_SOCKET_URL: 'https://{{pgrole}}.{{domain.stdout}}{{tldset}}{{cname}}'
+          ADMISSION_GATE_MAX_INFLIGHT: '500'
+
+    - name: 'Setting {{pgrole_realtime}} ENV'
+      set_fact:
+        pg_env_realtime:
+          NODE_ENV: 'production'
+          DATABASE_URL: 'postgresql://{{postgres_user}}:{{postgres_password}}@db:5432/{{postgres_db}}'
+          NEXT_PUBLIC_APP_URL: 'https://{{pgrole}}.{{domain.stdout}}{{tldset}}{{cname}}'
+          BETTER_AUTH_URL: 'https://{{pgrole}}.{{domain.stdout}}{{tldset}}{{cname}}'
+          BETTER_AUTH_SECRET: '{{sim_better_auth_secret}}'
+          INTERNAL_API_SECRET: '{{sim_internal_api_secret}}'
+          REDIS_URL: ''
+
+    - name: 'Setting {{pgrole_db}} ENV'
+      set_fact:
+        pg_env_db:
+          POSTGRES_USER: '{{postgres_user}}'
+          POSTGRES_PASSWORD: '{{postgres_password}}'
+          POSTGRES_DB: '{{postgres_db}}'
+
+    - name: 'Setting {{pgrole_migrations}} ENV'
+      set_fact:
+        pg_env_migrations:
+          DATABASE_URL: 'postgresql://{{postgres_user}}:{{postgres_password}}@db:5432/{{postgres_db}}'
+
+    - name: 'Setting {{pgrole_ollama}} ENV'
+      set_fact:
+        pg_env_ollama:
+          OLLAMA_LOAD_TIMEOUT: '-1'
+          OLLAMA_KEEP_ALIVE: '-1'
+          OLLAMA_DEBUG: '1'
+          OLLAMA_HOST: '0.0.0.0:11434'
+
+    - name: 'Setting {{pgrole_ollama}} ENV (GPU)'
+      set_fact:
+        pg_env_ollama_gpu: '{{ pg_env_ollama | combine({"NVIDIA_DRIVER_CAPABILITIES": "all"}) }}'
+
+    # MAIN DEPLOYMENT #############################################################
+    - name: 'Deploying {{pgrole_db}}'
+      docker_container:
+        name: '{{pgrole_db}}'
+        image: '{{image4}}'
+        pull: yes
+        published_ports:
+          - '{{ports.stdout}}{{extport3}}:{{intport3}}'
+        volumes: '{{pg_volumes_db}}'
+        env: '{{pg_env_db}}'
+        restart_policy: unless-stopped
+        networks:
+          - name: plexguide
+            aliases:
+              - '{{pgrole_db}}'
+              - 'db'
+        state: started
+
+    - name: 'Waiting for {{pgrole_db}} to accept connections'
+      command: docker exec {{pgrole_db}} pg_isready -U {{postgres_user}} -d {{postgres_db}}
+      register: sim_db_ready
+      changed_when: false
+      retries: 30
+      delay: 2
+      until: sim_db_ready.rc == 0
+
+    - name: 'Deploying {{pgrole_realtime}}'
+      docker_container:
+        name: '{{pgrole_realtime}}'
+        image: '{{image2}}'
+        pull: yes
+        published_ports:
+          - '{{ports.stdout}}{{extport2}}:{{intport2}}'
+        env: '{{pg_env_realtime}}'
+        memory: '1G'
+        restart_policy: unless-stopped
+        networks:
+          - name: plexguide
+            aliases:
+              - '{{pgrole_realtime}}'
+              - 'realtime'
+        state: started
+
+    - name: 'Removing old {{pgrole_migrations}} container'
+      docker_container:
+        name: '{{pgrole_migrations}}'
+        state: absent
+
+    - name: 'Running {{pgrole_migrations}}'
+      docker_container:
+        name: '{{pgrole_migrations}}'
+        image: '{{image3}}'
+        pull: yes
+        working_dir: '/app/packages/db'
+        command: 'bun run db:migrate'
+        env: '{{pg_env_migrations}}'
+        restart_policy: 'no'
+        detach: false
+        cleanup: true
+        networks:
+          - name: plexguide
+            aliases:
+              - '{{pgrole_migrations}}'
+        state: started
+
+    - name: 'Removing CPU Ollama container when GPU mode is selected'
+      docker_container:
+        name: '{{pgrole_ollama}}-cpu'
+        state: absent
+      when: sim_ollama_profile == 'gpu'
+
+    - name: 'Removing GPU Ollama container when CPU mode is selected'
+      docker_container:
+        name: '{{pgrole_ollama}}'
+        state: absent
+      when: sim_ollama_profile == 'cpu'
+
+    - name: 'Deploying {{pgrole_ollama}} (GPU mode)'
+      docker_container:
+        name: '{{pgrole_ollama}}'
+        image: '{{image5}}'
+        pull: yes
+        command: 'serve'
+        published_ports:
+          - '{{ports.stdout}}{{extport4}}:{{intport4}}'
+        volumes: '{{pg_volumes_ollama}}'
+        env: '{{pg_env_ollama_gpu}}'
+        restart_policy: unless-stopped
+        networks:
+          - name: plexguide
+            aliases:
+              - '{{pgrole_ollama}}'
+              - 'ollama'
+        device_requests:
+          - capabilities:
+              - - gpu
+        state: started
+      when: sim_ollama_profile == 'gpu'
+
+    - name: 'Deploying {{pgrole_ollama}} (CPU mode)'
+      docker_container:
+        name: '{{pgrole_ollama}}-cpu'
+        image: '{{image5}}'
+        pull: yes
+        command: 'serve'
+        published_ports:
+          - '{{ports.stdout}}{{extport4}}:{{intport4}}'
+        volumes: '{{pg_volumes_ollama}}'
+        env: '{{pg_env_ollama}}'
+        restart_policy: unless-stopped
+        networks:
+          - name: plexguide
+            aliases:
+              - '{{pgrole_ollama}}-cpu'
+              - 'ollama'
+        state: started
+      when: sim_ollama_profile == 'cpu'
+
+    - name: 'Waiting for Ollama API to be ready'
+      command: docker run --rm --network plexguide {{image5}} sh -lc 'OLLAMA_HOST=ollama:11434 ollama list'
+      register: sim_ollama_ready
+      changed_when: false
+      retries: 30
+      delay: 2
+      until: sim_ollama_ready.rc == 0
+
+    - name: 'Pulling starter model for Ollama'
+      command: docker run --rm --network plexguide -v /opt/appdata/{{pgrole}}/ollama:/root/.ollama {{image5}} sh -lc 'OLLAMA_HOST=ollama:11434 ollama pull gemma3:4b'
+      register: sim_ollama_model_pull
+      changed_when: "'already exists' not in sim_ollama_model_pull.stdout"
+
+    - name: 'Deploying {{pgrole}}'
+      docker_container:
+        name: '{{pgrole}}'
+        image: '{{image}}'
+        pull: yes
+        published_ports:
+          - '{{ports.stdout}}{{extport}}:{{intport}}'
+        env: '{{pg_env}}'
+        memory: '8G'
+        restart_policy: unless-stopped
+        networks:
+          - name: plexguide
+            aliases:
+              - '{{pgrole}}'
+        state: started
+        labels: '{{pg_labels}}'
+
+##PG-Community
