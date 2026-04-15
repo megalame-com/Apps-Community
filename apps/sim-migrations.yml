@@ -42,7 +42,7 @@
         env: '{{pg_env}}'
         restart_policy: 'no'
         detach: false
-        cleanup: true
+        cleanup: false
         networks:
           - name: plexguide
             aliases:
