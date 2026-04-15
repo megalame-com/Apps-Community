@@ -67,7 +67,7 @@
           ENCRYPTION_KEY: '{{sim_encryption_key}}'
           API_ENCRYPTION_KEY: ''
           INTERNAL_API_SECRET: '{{sim_internal_api_secret}}'
-          REDIS_URL: ''
+          REDIS_URL: 'redis://sim-redis:6379'
           COPILOT_API_KEY: ''
           SIM_AGENT_API_URL: ''
           # BLACKLISTED_PROVIDERS: 'openai,google,mistral,azure-openai,azure-anthropic,fireworks,vllm'

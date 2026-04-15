@@ -1,0 +1,44 @@
+#!/bin/bash
+# Author(s):  MHA-Team
+# GNU:        General Public License v3.0
+################################################################################
+---
+- hosts: localhost
+  gather_facts: false
+  tasks:
+    # FACTS #######################################################################
+    - name: 'Set Known Facts'
+      set_fact:
+        pgrole: 'sim-redis'
+        intport: '6379'
+        extport: '6379'
+        image: 'redis:7-alpine'
+
+    # CORE (MANDATORY) ############################################################
+    - name: 'Including cron job'
+      include_tasks: '/opt/communityapps/apps/_core.yml'
+
+    - name: 'Setting {{pgrole}} Volumes'
+      set_fact:
+        pg_volumes:
+          - '/opt/appdata/{{pgrole}}:/data'
+          - '/etc/localtime:/etc/localtime:ro'
+
+    # MAIN DEPLOYMENT #############################################################
+    - name: 'Deploying {{pgrole}}'
+      docker_container:
+        name: '{{pgrole}}'
+        image: '{{image}}'
+        pull: yes
+        command: 'redis-server --appendonly yes'
+        volumes: '{{pg_volumes}}'
+        restart_policy: unless-stopped
+        networks:
+          - name: plexguide
+            aliases:
+              - '{{pgrole}}'
+              - 'redis'
+              - 'sim-redis'
+        state: started
+
+##PG-Community

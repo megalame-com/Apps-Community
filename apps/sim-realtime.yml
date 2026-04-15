@@ -58,7 +58,7 @@
           BETTER_AUTH_URL: 'https://sim.{{domain.stdout}}'
           BETTER_AUTH_SECRET: '{{sim_better_auth_secret}}'
           INTERNAL_API_SECRET: '{{sim_internal_api_secret}}'
-          REDIS_URL: ''
+          REDIS_URL: 'redis://sim-redis:6379'
 
     # MAIN DEPLOYMENT #############################################################
     - name: 'Deploying {{pgrole}}'
