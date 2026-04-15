@@ -61,6 +61,8 @@
           DATABASE_URL: 'postgresql://{{postgres_user}}:{{postgres_password}}@sim-db:5432/{{postgres_db}}'
           BETTER_AUTH_URL: 'https://{{pgrole}}.{{domain.stdout}}'
           NEXT_PUBLIC_APP_URL: 'https://{{pgrole}}.{{domain.stdout}}'
+          ORGANIZATIONS_ENABLED: 'true'
+          NEXT_PUBLIC_ORGANIZATIONS_ENABLED: 'true'
           BETTER_AUTH_SECRET: '{{sim_better_auth_secret}}'
           ENCRYPTION_KEY: '{{sim_encryption_key}}'
           API_ENCRYPTION_KEY: ''
