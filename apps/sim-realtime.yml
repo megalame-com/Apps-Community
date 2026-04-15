@@ -41,12 +41,12 @@
 
     - name: 'Generating better-auth secret'
       set_fact:
-        sim_better_auth_secret: "{{ lookup('password', '/opt/appdata/sim/.better_auth_secret length=64 chars=hex') }}"
+        sim_better_auth_secret: "{{ lookup('password', '/opt/appdata/sim/.better_auth_secret length=32 chars=hex') }}"
       no_log: true
 
     - name: 'Generating internal API secret'
       set_fact:
-        sim_internal_api_secret: "{{ lookup('password', '/opt/appdata/sim/.internal_api_secret length=64 chars=hex') }}"
+        sim_internal_api_secret: "{{ lookup('password', '/opt/appdata/sim/.internal_api_secret length=32 chars=hex') }}"
       no_log: true
 
     - name: 'Setting {{pgrole}} ENV'
