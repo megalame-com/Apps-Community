@@ -70,6 +70,8 @@
           REDIS_URL: ''
           COPILOT_API_KEY: ''
           SIM_AGENT_API_URL: ''
+          BLACKLISTED_PROVIDERS: 'openai,anthropic,google,mistral,azure-openai,azure-anthropic,fireworks,vllm'
+          BLACKLISTED_MODELS: 'claude-*,gpt-*,gemini-*'
           OLLAMA_URL: 'http://ollama:11434'
           SOCKET_SERVER_URL: 'http://sim-realtime:3002'
           NEXT_PUBLIC_SOCKET_URL: 'https://sim-realtime.{{domain.stdout}}'

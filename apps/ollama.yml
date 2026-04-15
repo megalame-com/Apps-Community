@@ -90,4 +90,17 @@
         state: started
       when: ollama_profile == 'cpu'
 
+    - name: 'Waiting for Ollama API to be ready'
+      command: docker run --rm --network plexguide {{image}} sh -lc 'OLLAMA_HOST=ollama:11434 ollama list'
+      register: ollama_ready
+      changed_when: false
+      retries: 30
+      delay: 2
+      until: ollama_ready.rc == 0
+
+    - name: 'Pulling starter model for Ollama'
+      command: docker run --rm --network plexguide -v /opt/appdata/{{pgrole}}:/root/.ollama {{image}} sh -lc 'OLLAMA_HOST=ollama:11434 ollama pull gemma3:4b'
+      register: ollama_model_pull
+      changed_when: "'already exists' not in ollama_model_pull.stdout"
+
 ##PG-Community
