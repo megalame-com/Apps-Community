@@ -46,7 +46,7 @@
 
     - name: 'Generating encryption key'
       set_fact:
-        sim_encryption_key: "{{ lookup('password', '/opt/appdata/sim/.encryption_key length=32 chars=hex') }}"
+        sim_encryption_key: "{{ lookup('password', '/opt/appdata/sim/.encryption_key length=64 chars=hex') }}"
       no_log: true
 
     - name: 'Generating internal API secret'
