@@ -13,7 +13,7 @@
         intport: '8502'
         extport: '8502'
         intport2: '5055'
-        extport2: '5055'
+        extport2: '5056'
         image: 'lfnovo/open_notebook:v1-latest'
         image2: 'surrealdb/surrealdb:v2'
 
