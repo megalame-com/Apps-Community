@@ -16,6 +16,7 @@
         intport: '3000'
         extport: '5973'
         image: 'latitudedata/web:latest'
+        image_migrations: 'latitudedata/migrations:latest'
         image_db: 'pgvector/pgvector:pg17'
 
     # CORE (MANDATORY) ############################################################
@@ -47,7 +48,7 @@
 
     - name: 'Generating better-auth secret'
       set_fact:
-        latitude_better_auth_secret: "{{ lookup('password', '/opt/appdata/latitude/.lat_better_auth_secret length=64 chars=hex') }}"
+        latitude_better_auth_secret: "{{ lookup('password', '/opt/appdata/latitude/.lat_better_auth_secret_v2 length=64 chars=ascii_letters,digits') }}"
       no_log: true
 
     - name: 'Generating database password'
@@ -58,7 +59,7 @@
     - name: 'Setting latitude database ENV'
       set_fact:
         latitude_db_env:
-          POSTGRES_USER: 'latitude'
+          POSTGRES_USER: 'postgres'
           POSTGRES_PASSWORD: '{{latitude_postgres_password}}'
           POSTGRES_DB: 'latitude'
 
@@ -73,7 +74,7 @@
           LAT_TRUSTED_ORIGINS: 'http://localhost:{{intport}},https://{{pgrole}}.{{domain.stdout}}'
           LAT_CORS_ALLOWED_ORIGINS: 'http://localhost:{{intport}},https://{{pgrole}}.{{domain.stdout}}'
           LAT_WEB_PORT: '{{intport}}'
-          LAT_DATABASE_URL: 'postgresql://latitude:{{latitude_postgres_password}}@latitude-database:5432/latitude'
+          LAT_DATABASE_URL: 'postgresql://postgres:{{latitude_postgres_password}}@latitude-database:5432/latitude'
           LAT_ADMIN_DATABASE_URL: 'postgresql://postgres:{{latitude_postgres_password}}@latitude-database:5432/postgres'
           LAT_MASTER_ENCRYPTION_KEY: '{{latitude_master_encryption_key}}'
           LAT_BETTER_AUTH_SECRET: '{{latitude_better_auth_secret}}'
@@ -95,6 +96,28 @@
             aliases:
               - 'latitude-database'
               - 'postgres'
+        state: started
+
+    - name: 'Removing old latitude-migrations container'
+      docker_container:
+        name: 'latitude-migrations'
+        state: absent
+      ignore_errors: true
+
+    - name: 'Running latitude-migrations'
+      docker_container:
+        name: 'latitude-migrations'
+        image: '{{image_migrations}}'
+        pull: yes
+        env: '{{pg_env}}'
+        restart_policy: 'no'
+        detach: false
+        cleanup: true
+        networks:
+          - name: plexguide
+            aliases:
+              - 'latitude-migrations'
+              - 'migrations'
         state: started
 
     - name: 'Deploying {{pgrole}}'
