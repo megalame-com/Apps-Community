@@ -142,6 +142,15 @@
           # LAT_ALLOWED_EMAIL_DOMAIN: 'example.com'
 
     # MAIN DEPLOYMENT #############################################################
+    - name: 'Ensuring latitude postgres data permissions'
+      file:
+        path: '/opt/appdata/latitude/database'
+        state: directory
+        owner: '999'
+        group: '999'
+        mode: '0700'
+        recurse: true
+
     - name: 'Deploying latitude-database'
       docker_container:
         name: 'latitude-database'
