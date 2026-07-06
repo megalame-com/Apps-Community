@@ -92,6 +92,11 @@
           # with previously initialized persistent volumes.
           LAT_DATABASE_URL: 'postgresql://latitude:{{latitude_postgres_password}}@latitude-database:5432/latitude'
           LAT_ADMIN_DATABASE_URL: 'postgresql://latitude:{{latitude_postgres_password}}@latitude-database:5432/latitude'
+          LAT_CLICKHOUSE_HOST: 'latitude-clickhouse'
+          LAT_CLICKHOUSE_PORT: '8123'
+          LAT_CLICKHOUSE_DB: 'latitude'
+          LAT_CLICKHOUSE_USER: 'latitude'
+          LAT_CLICKHOUSE_PASSWORD: '{{latitude_clickhouse_password}}'
           LAT_CLICKHOUSE_URL: 'http://latitude:{{latitude_clickhouse_password}}@latitude-clickhouse:8123/latitude'
           LAT_CLICKHOUSE_MIGRATION_URL: 'http://latitude:{{latitude_clickhouse_password}}@latitude-clickhouse:8123/latitude'
           LAT_MASTER_ENCRYPTION_KEY: '{{latitude_master_encryption_key}}'
