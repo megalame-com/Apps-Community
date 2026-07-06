@@ -116,13 +116,13 @@
           LAT_TEMPORAL_ADDRESS: 'latitude-temporal:7233'
           LAT_TEMPORAL_HOST: 'latitude-temporal'
           LAT_TEMPORAL_PORT: '7233'
-          LAT_CLICKHOUSE_HOST: 'latitude-clickhouse'
+          LAT_CLICKHOUSE_HOST: 'clickhouse'
           LAT_CLICKHOUSE_PORT: '8123'
           LAT_CLICKHOUSE_DB: 'latitude'
           LAT_CLICKHOUSE_USER: 'latitude'
           LAT_CLICKHOUSE_PASSWORD: '{{latitude_clickhouse_password}}'
-          LAT_CLICKHOUSE_URL: 'http://latitude:{{latitude_clickhouse_password}}@latitude-clickhouse:8123/latitude'
-          LAT_CLICKHOUSE_MIGRATION_URL: 'clickhouse://latitude:{{latitude_clickhouse_password}}@latitude-clickhouse:9000/latitude'
+          LAT_CLICKHOUSE_URL: 'http://latitude:{{latitude_clickhouse_password}}@clickhouse:8123/latitude'
+          LAT_CLICKHOUSE_MIGRATION_URL: 'clickhouse://latitude:{{latitude_clickhouse_password}}@clickhouse:9000/latitude'
           LAT_STORAGE_PROVIDER: 's3'
           LAT_STORAGE_S3_ENDPOINT: 'http://latitude-seaweedfs:8333'
           LAT_STORAGE_S3_REGION: 'us-east-1'
@@ -169,21 +169,32 @@
         state: started
 
     - name: 'Deploying latitude-clickhouse'
-      docker_container:
-        name: 'latitude-clickhouse'
-        image: '{{image_clickhouse}}'
-        pull: yes
-        env: '{{latitude_clickhouse_env}}'
-        volumes:
-          - '/opt/appdata/latitude/clickhouse:/var/lib/clickhouse'
-          - '/etc/localtime:/etc/localtime:ro'
-        restart_policy: unless-stopped
-        networks:
-          - name: plexguide
-            aliases:
-              - 'latitude-clickhouse'
-              - 'clickhouse'
-        state: started
+      block:
+        - name: 'Ensuring latitude clickhouse data permissions'
+          file:
+            path: '/opt/appdata/latitude/clickhouse'
+            state: directory
+            owner: '101'
+            group: '101'
+            mode: '0755'
+            recurse: true
+
+        - name: 'Deploying latitude-clickhouse'
+          docker_container:
+            name: 'latitude-clickhouse'
+            image: '{{image_clickhouse}}'
+            pull: yes
+            env: '{{latitude_clickhouse_env}}'
+            volumes:
+              - '/opt/appdata/latitude/clickhouse:/var/lib/clickhouse'
+              - '/etc/localtime:/etc/localtime:ro'
+            restart_policy: unless-stopped
+            networks:
+              - name: plexguide
+                aliases:
+                  - 'latitude-clickhouse'
+                  - 'clickhouse'
+            state: started
 
     - name: 'Deploying latitude-redis'
       docker_container:
