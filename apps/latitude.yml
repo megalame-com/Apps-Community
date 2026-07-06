@@ -15,21 +15,7 @@
         pgrole: 'latitude'
         intport: '3000'
         extport: '5973'
-        intport_api: '3001'
-        extport_api: '5974'
-        intport_ingest: '3002'
-        extport_ingest: '5975'
-        image_web: 'latitudedata/web:latest'
-        image_api: 'latitudedata/api:latest'
-        image_ingest: 'latitudedata/ingest:latest'
-        image_workers: 'latitudedata/workers:latest'
-        image_workflows: 'latitudedata/workflows:latest'
-        image_migrations: 'latitudedata/migrations:latest'
-        image_postgres: 'pgvector/pgvector:pg17'
-        image_clickhouse: 'clickhouse/clickhouse-server:latest'
-        image_redis: 'redis:7-alpine'
-        image_temporal: 'temporalio/auto-setup:latest'
-        image_seaweedfs: 'chrislusf/seaweedfs:latest'
+        image: 'latitudedata/web:latest'
 
     # CORE (MANDATORY) ############################################################
     - name: 'Including cron job'
@@ -53,295 +39,28 @@
           traefik.frontend.headers.customResponseHeaders: 'X-Robots-Tag:noindex,nofollow,nosnippet,noarchive,notranslate,noimageindex'
           traefik.frontend.headers.forceSTSHeader: 'true'
 
-    - name: 'Generating master encryption key'
+    - name: 'Setting {{pgrole}} ENV'
       set_fact:
-        latitude_master_encryption_key: "{{ lookup('password', '/opt/appdata/latitude/.lat_master_encryption_key length=64 chars=hex') }}"
-      no_log: true
-
-    - name: 'Generating better-auth secret'
-      set_fact:
-        latitude_better_auth_secret: "{{ lookup('password', '/opt/appdata/latitude/.lat_better_auth_secret length=64 chars=hex') }}"
-      no_log: true
-
-    - name: 'Generating postgres password'
-      set_fact:
-        latitude_postgres_password: "{{ lookup('password', '/opt/appdata/latitude/.postgres_password length=32 chars=ascii_letters,digits') }}"
-      no_log: true
-
-    - name: 'Generating clickhouse password'
-      set_fact:
-        latitude_clickhouse_password: "{{ lookup('password', '/opt/appdata/latitude/.clickhouse_password length=32 chars=ascii_letters,digits') }}"
-      no_log: true
-
-    - name: 'Setting shared Latitude environment'
-      set_fact:
-        latitude_env_shared:
-          LAT_MASTER_ENCRYPTION_KEY: '{{latitude_master_encryption_key}}'
-          LAT_BETTER_AUTH_SECRET: '{{latitude_better_auth_secret}}'
-          LAT_WEB_URL: 'https://{{pgrole}}.{{domain.stdout}}'
-          LAT_API_URL: 'https://{{pgrole}}-api.{{domain.stdout}}'
-          LAT_INGEST_URL: 'https://{{pgrole}}-ingest.{{domain.stdout}}'
-          LAT_TRUSTED_ORIGINS: 'https://{{pgrole}}.{{domain.stdout}}'
-          LAT_CORS_ALLOWED_ORIGINS: 'https://{{pgrole}}.{{domain.stdout}}'
-          LAT_DATABASE_HOST: 'latitude-postgres'
-          LAT_DATABASE_PORT: '5432'
-          LAT_DATABASE_USER: 'latitude'
-          LAT_DATABASE_PASSWORD: '{{latitude_postgres_password}}'
-          LAT_DATABASE_NAME: 'latitude'
-          LAT_ADMIN_DATABASE_HOST: 'latitude-postgres'
-          LAT_ADMIN_DATABASE_PORT: '5432'
-          LAT_ADMIN_DATABASE_USER: 'postgres'
-          LAT_ADMIN_DATABASE_PASSWORD: '{{latitude_postgres_password}}'
-          LAT_ADMIN_DATABASE_NAME: 'postgres'
-          LAT_CLICKHOUSE_HOST: 'latitude-clickhouse'
-          LAT_CLICKHOUSE_PORT: '8123'
-          LAT_CLICKHOUSE_USER: 'latitude'
-          LAT_CLICKHOUSE_PASSWORD: '{{latitude_clickhouse_password}}'
-          LAT_CLICKHOUSE_DB: 'latitude'
-          LAT_REDIS_HOST: 'latitude-redis'
-          LAT_REDIS_PORT: '6379'
-          LAT_BULLMQ_HOST: 'latitude-redis-bullmq'
-          LAT_BULLMQ_PORT: '6379'
-          LAT_TEMPORAL_ADDRESS: 'latitude-temporal:7233'
-          LAT_STORAGE_PROVIDER: 's3'
-          LAT_STORAGE_S3_ENDPOINT: 'http://latitude-seaweedfs:8333'
-          LAT_STORAGE_S3_REGION: 'us-east-1'
-          LAT_STORAGE_S3_BUCKET: 'latitude'
-          LAT_STORAGE_S3_ACCESS_KEY_ID: 'latitude'
-          LAT_STORAGE_S3_SECRET_ACCESS_KEY: 'latitude-secret-key'
-          LAT_STORAGE_S3_FORCE_PATH_STYLE: 'true'
-
-    - name: 'Setting postgres environment'
-      set_fact:
-        latitude_postgres_env:
-          POSTGRES_USER: 'latitude'
-          POSTGRES_PASSWORD: '{{latitude_postgres_password}}'
-          POSTGRES_DB: 'latitude'
-
-    - name: 'Setting clickhouse environment'
-      set_fact:
-        latitude_clickhouse_env:
-          CLICKHOUSE_DB: 'latitude'
-          CLICKHOUSE_USER: 'latitude'
-          CLICKHOUSE_PASSWORD: '{{latitude_clickhouse_password}}'
-
-    - name: 'Setting redis environment'
-      set_fact:
-        latitude_redis_env:
-          TZ: 'UTC'
-
-    - name: 'Setting temporal environment'
-      set_fact:
-        latitude_temporal_env:
-          DB: 'postgres12'
-          DB_PORT: '5432'
-          POSTGRES_USER: 'latitude'
-          POSTGRES_PWD: '{{latitude_postgres_password}}'
-          POSTGRES_SEEDS: 'latitude-postgres'
-
-    - name: 'Setting seaweedfs command'
-      set_fact:
-        latitude_seaweedfs_command: 'server -s3 -dir /data -ip.bind=0.0.0.0 -s3.port=8333'
+        pg_env:
+          LAT_WEB_PORT: '{{intport}}'
 
     # MAIN DEPLOYMENT #############################################################
-    - name: 'Deploying latitude-postgres'
+    - name: 'Deploying {{pgrole}}'
       docker_container:
-        name: 'latitude-postgres'
-        image: '{{image_postgres}}'
+        name: '{{pgrole}}'
+        image: '{{image}}'
         pull: yes
-        env: '{{latitude_postgres_env}}'
-        volumes:
-          - '/opt/appdata/latitude/postgres:/var/lib/postgresql/data'
-          - '/etc/localtime:/etc/localtime:ro'
-        restart_policy: unless-stopped
-        networks:
-          - name: plexguide
-            aliases:
-              - 'latitude-postgres'
-              - 'postgres'
-        state: started
-
-    - name: 'Deploying latitude-clickhouse'
-      docker_container:
-        name: 'latitude-clickhouse'
-        image: '{{image_clickhouse}}'
-        pull: yes
-        env: '{{latitude_clickhouse_env}}'
-        volumes:
-          - '/opt/appdata/latitude/clickhouse:/var/lib/clickhouse'
-          - '/etc/localtime:/etc/localtime:ro'
-        restart_policy: unless-stopped
-        networks:
-          - name: plexguide
-            aliases:
-              - 'latitude-clickhouse'
-              - 'clickhouse'
-        state: started
-
-    - name: 'Deploying latitude-redis'
-      docker_container:
-        name: 'latitude-redis'
-        image: '{{image_redis}}'
-        pull: yes
-        env: '{{latitude_redis_env}}'
-        volumes:
-          - '/opt/appdata/latitude/redis:/data'
-          - '/etc/localtime:/etc/localtime:ro'
-        command: 'redis-server --appendonly yes'
-        restart_policy: unless-stopped
-        networks:
-          - name: plexguide
-            aliases:
-              - 'latitude-redis'
-              - 'redis'
-        state: started
-
-    - name: 'Deploying latitude-redis-bullmq'
-      docker_container:
-        name: 'latitude-redis-bullmq'
-        image: '{{image_redis}}'
-        pull: yes
-        env: '{{latitude_redis_env}}'
-        volumes:
-          - '/opt/appdata/latitude/redis-bullmq:/data'
-          - '/etc/localtime:/etc/localtime:ro'
-        command: 'redis-server --appendonly yes'
-        restart_policy: unless-stopped
-        networks:
-          - name: plexguide
-            aliases:
-              - 'latitude-redis-bullmq'
-              - 'redis-bullmq'
-        state: started
-
-    - name: 'Deploying latitude-temporal'
-      docker_container:
-        name: 'latitude-temporal'
-        image: '{{image_temporal}}'
-        pull: yes
-        env: '{{latitude_temporal_env}}'
-        restart_policy: unless-stopped
-        networks:
-          - name: plexguide
-            aliases:
-              - 'latitude-temporal'
-              - 'temporal'
-        state: started
-
-    - name: 'Deploying latitude-seaweedfs'
-      docker_container:
-        name: 'latitude-seaweedfs'
-        image: '{{image_seaweedfs}}'
-        pull: yes
-        command: '{{latitude_seaweedfs_command}}'
-        volumes:
-          - '/opt/appdata/latitude/seaweedfs:/data'
-          - '/etc/localtime:/etc/localtime:ro'
-        restart_policy: unless-stopped
-        networks:
-          - name: plexguide
-            aliases:
-              - 'latitude-seaweedfs'
-              - 'seaweedfs'
-        state: started
-
-    - name: 'Removing old latitude-migrations container'
-      docker_container:
-        name: 'latitude-migrations'
-        state: absent
-
-    - name: 'Running latitude-migrations'
-      docker_container:
-        name: 'latitude-migrations'
-        image: '{{image_migrations}}'
-        pull: yes
-        env: '{{latitude_env_shared}}'
-        restart_policy: 'no'
-        detach: false
-        cleanup: true
-        networks:
-          - name: plexguide
-            aliases:
-              - 'latitude-migrations'
-              - 'migrations'
-        state: started
-
-    - name: 'Deploying latitude-web'
-      docker_container:
-        name: 'latitude-web'
-        image: '{{image_web}}'
-        pull: yes
-        env: '{{latitude_env_shared}}'
+        env: '{{pg_env}}'
         published_ports:
           - '{{ports.stdout}}{{extport}}:{{intport}}'
+        volumes:
+          - '/etc/localtime:/etc/localtime:ro'
         restart_policy: unless-stopped
         networks:
           - name: plexguide
             aliases:
-              - 'latitude-web'
-              - 'web'
               - '{{pgrole}}'
         state: started
         labels: '{{pg_labels}}'
-
-    - name: 'Deploying latitude-api'
-      docker_container:
-        name: 'latitude-api'
-        image: '{{image_api}}'
-        pull: yes
-        env: '{{latitude_env_shared}}'
-        published_ports:
-          - '{{ports.stdout}}{{extport_api}}:{{intport_api}}'
-        restart_policy: unless-stopped
-        networks:
-          - name: plexguide
-            aliases:
-              - 'latitude-api'
-              - 'api'
-        state: started
-
-    - name: 'Deploying latitude-ingest'
-      docker_container:
-        name: 'latitude-ingest'
-        image: '{{image_ingest}}'
-        pull: yes
-        env: '{{latitude_env_shared}}'
-        published_ports:
-          - '{{ports.stdout}}{{extport_ingest}}:{{intport_ingest}}'
-        restart_policy: unless-stopped
-        networks:
-          - name: plexguide
-            aliases:
-              - 'latitude-ingest'
-              - 'ingest'
-        state: started
-
-    - name: 'Deploying latitude-workers'
-      docker_container:
-        name: 'latitude-workers'
-        image: '{{image_workers}}'
-        pull: yes
-        env: '{{latitude_env_shared}}'
-        restart_policy: unless-stopped
-        networks:
-          - name: plexguide
-            aliases:
-              - 'latitude-workers'
-              - 'workers'
-        state: started
-
-    - name: 'Deploying latitude-workflows'
-      docker_container:
-        name: 'latitude-workflows'
-        image: '{{image_workflows}}'
-        pull: yes
-        env: '{{latitude_env_shared}}'
-        restart_policy: unless-stopped
-        networks:
-          - name: plexguide
-            aliases:
-              - 'latitude-workflows'
-              - 'workflows'
-        state: started
 
 ##PG-Community
