@@ -119,6 +119,7 @@
               - 'latitude-migrations'
               - 'migrations'
         state: started
+      ignore_errors: true
 
     - name: 'Deploying {{pgrole}}'
       docker_container:
