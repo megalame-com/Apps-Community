@@ -122,7 +122,7 @@
           LAT_CLICKHOUSE_USER: 'latitude'
           LAT_CLICKHOUSE_PASSWORD: '{{latitude_clickhouse_password}}'
           LAT_CLICKHOUSE_URL: 'http://latitude:{{latitude_clickhouse_password}}@latitude-clickhouse:8123/latitude'
-          LAT_CLICKHOUSE_MIGRATION_URL: 'http://latitude:{{latitude_clickhouse_password}}@latitude-clickhouse:8123/latitude'
+          LAT_CLICKHOUSE_MIGRATION_URL: 'clickhouse://latitude:{{latitude_clickhouse_password}}@latitude-clickhouse:9000/latitude'
           LAT_STORAGE_PROVIDER: 's3'
           LAT_STORAGE_S3_ENDPOINT: 'http://latitude-seaweedfs:8333'
           LAT_STORAGE_S3_REGION: 'us-east-1'
