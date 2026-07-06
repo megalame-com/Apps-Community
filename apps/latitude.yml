@@ -18,6 +18,7 @@
         image: 'latitudedata/web:latest'
         image_migrations: 'latitudedata/migrations:latest'
         image_db: 'pgvector/pgvector:pg17'
+        image_clickhouse: 'clickhouse/clickhouse-server:latest'
 
     # CORE (MANDATORY) ############################################################
     - name: 'Including cron job'
@@ -56,12 +57,24 @@
         latitude_postgres_password: "{{ lookup('password', '/opt/appdata/latitude/.postgres_password length=32 chars=ascii_letters,digits') }}"
       no_log: true
 
+    - name: 'Generating clickhouse password'
+      set_fact:
+        latitude_clickhouse_password: "{{ lookup('password', '/opt/appdata/latitude/.clickhouse_password length=32 chars=ascii_letters,digits') }}"
+      no_log: true
+
     - name: 'Setting latitude database ENV'
       set_fact:
         latitude_db_env:
           POSTGRES_USER: 'latitude'
           POSTGRES_PASSWORD: '{{latitude_postgres_password}}'
           POSTGRES_DB: 'latitude'
+
+    - name: 'Setting latitude clickhouse ENV'
+      set_fact:
+        latitude_clickhouse_env:
+          CLICKHOUSE_DB: 'latitude'
+          CLICKHOUSE_USER: 'latitude'
+          CLICKHOUSE_PASSWORD: '{{latitude_clickhouse_password}}'
 
     - name: 'Setting {{pgrole}} ENV'
       set_fact:
@@ -79,9 +92,18 @@
           # with previously initialized persistent volumes.
           LAT_DATABASE_URL: 'postgresql://latitude:{{latitude_postgres_password}}@latitude-database:5432/latitude'
           LAT_ADMIN_DATABASE_URL: 'postgresql://latitude:{{latitude_postgres_password}}@latitude-database:5432/latitude'
+          LAT_CLICKHOUSE_URL: 'http://latitude:{{latitude_clickhouse_password}}@latitude-clickhouse:8123/latitude'
+          LAT_CLICKHOUSE_MIGRATION_URL: 'http://latitude:{{latitude_clickhouse_password}}@latitude-clickhouse:8123/latitude'
           LAT_MASTER_ENCRYPTION_KEY: '{{latitude_master_encryption_key}}'
           LAT_BETTER_AUTH_SECRET: '{{latitude_better_auth_secret}}'
           BETTER_AUTH_SECRET: '{{latitude_better_auth_secret}}'
+          # Optional OAuth SSO providers (set full values to enable social login).
+          # LAT_GOOGLE_CLIENT_ID: 'your-google-client-id'
+          # LAT_GOOGLE_CLIENT_SECRET: 'your-google-client-secret'
+          LAT_GITHUB_CLIENT_ID: 'Iv23liivAHqEKVYkQyZP'
+          LAT_GITHUB_CLIENT_SECRET: 'ee3257760626fa3e7eb876f779a66738a7ae6e72'
+          # Optional sign-in restriction to a single domain.
+          # LAT_ALLOWED_EMAIL_DOMAIN: 'example.com'
 
     # MAIN DEPLOYMENT #############################################################
     - name: 'Deploying latitude-database'
@@ -99,6 +121,23 @@
             aliases:
               - 'latitude-database'
               - 'postgres'
+        state: started
+
+    - name: 'Deploying latitude-clickhouse'
+      docker_container:
+        name: 'latitude-clickhouse'
+        image: '{{image_clickhouse}}'
+        pull: yes
+        env: '{{latitude_clickhouse_env}}'
+        volumes:
+          - '/opt/appdata/latitude/clickhouse:/var/lib/clickhouse'
+          - '/etc/localtime:/etc/localtime:ro'
+        restart_policy: unless-stopped
+        networks:
+          - name: plexguide
+            aliases:
+              - 'latitude-clickhouse'
+              - 'clickhouse'
         state: started
 
     - name: 'Removing old latitude-migrations container'
