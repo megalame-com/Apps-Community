@@ -20,6 +20,8 @@
         image_db: 'pgvector/pgvector:pg17'
         image_clickhouse: 'clickhouse/clickhouse-server:latest'
         image_redis: 'redis:7-alpine'
+        image_temporal: 'temporalio/auto-setup:latest'
+        image_seaweedfs: 'chrislusf/seaweedfs:latest'
 
     # CORE (MANDATORY) ############################################################
     - name: 'Including cron job'
@@ -63,6 +65,11 @@
         latitude_clickhouse_password: "{{ lookup('password', '/opt/appdata/latitude/.clickhouse_password length=32 chars=ascii_letters,digits') }}"
       no_log: true
 
+    - name: 'Generating storage secret key'
+      set_fact:
+        latitude_storage_secret_key: "{{ lookup('password', '/opt/appdata/latitude/.storage_secret_key length=32 chars=ascii_letters,digits') }}"
+      no_log: true
+
     - name: 'Setting latitude database ENV'
       set_fact:
         latitude_db_env:
@@ -76,6 +83,15 @@
           CLICKHOUSE_DB: 'latitude'
           CLICKHOUSE_USER: 'latitude'
           CLICKHOUSE_PASSWORD: '{{latitude_clickhouse_password}}'
+
+    - name: 'Setting latitude temporal ENV'
+      set_fact:
+        latitude_temporal_env:
+          DB: 'postgres12'
+          DB_PORT: '5432'
+          POSTGRES_USER: 'latitude'
+          POSTGRES_PWD: '{{latitude_postgres_password}}'
+          POSTGRES_SEEDS: 'latitude-database'
 
     - name: 'Setting {{pgrole}} ENV'
       set_fact:
@@ -97,6 +113,9 @@
           LAT_REDIS_PORT: '6379'
           LAT_BULLMQ_HOST: 'latitude-redis'
           LAT_BULLMQ_PORT: '6379'
+          LAT_TEMPORAL_ADDRESS: 'latitude-temporal:7233'
+          LAT_TEMPORAL_HOST: 'latitude-temporal'
+          LAT_TEMPORAL_PORT: '7233'
           LAT_CLICKHOUSE_HOST: 'latitude-clickhouse'
           LAT_CLICKHOUSE_PORT: '8123'
           LAT_CLICKHOUSE_DB: 'latitude'
@@ -104,6 +123,13 @@
           LAT_CLICKHOUSE_PASSWORD: '{{latitude_clickhouse_password}}'
           LAT_CLICKHOUSE_URL: 'http://latitude:{{latitude_clickhouse_password}}@latitude-clickhouse:8123/latitude'
           LAT_CLICKHOUSE_MIGRATION_URL: 'http://latitude:{{latitude_clickhouse_password}}@latitude-clickhouse:8123/latitude'
+          LAT_STORAGE_PROVIDER: 's3'
+          LAT_STORAGE_S3_ENDPOINT: 'http://latitude-seaweedfs:8333'
+          LAT_STORAGE_S3_REGION: 'us-east-1'
+          LAT_STORAGE_S3_BUCKET: 'latitude'
+          LAT_STORAGE_S3_ACCESS_KEY_ID: 'latitude'
+          LAT_STORAGE_S3_SECRET_ACCESS_KEY: '{{latitude_storage_secret_key}}'
+          LAT_STORAGE_S3_FORCE_PATH_STYLE: 'true'
           LAT_MASTER_ENCRYPTION_KEY: '{{latitude_master_encryption_key}}'
           LAT_BETTER_AUTH_SECRET: '{{latitude_better_auth_secret}}'
           BETTER_AUTH_SECRET: '{{latitude_better_auth_secret}}'
@@ -165,6 +191,37 @@
             aliases:
               - 'latitude-redis'
               - 'redis'
+        state: started
+
+    - name: 'Deploying latitude-temporal'
+      docker_container:
+        name: 'latitude-temporal'
+        image: '{{image_temporal}}'
+        pull: yes
+        env: '{{latitude_temporal_env}}'
+        restart_policy: unless-stopped
+        networks:
+          - name: plexguide
+            aliases:
+              - 'latitude-temporal'
+              - 'temporal'
+        state: started
+
+    - name: 'Deploying latitude-seaweedfs'
+      docker_container:
+        name: 'latitude-seaweedfs'
+        image: '{{image_seaweedfs}}'
+        pull: yes
+        command: 'server -s3 -dir /data -ip.bind=0.0.0.0 -s3.port=8333'
+        volumes:
+          - '/opt/appdata/latitude/seaweedfs:/data'
+          - '/etc/localtime:/etc/localtime:ro'
+        restart_policy: unless-stopped
+        networks:
+          - name: plexguide
+            aliases:
+              - 'latitude-seaweedfs'
+              - 'seaweedfs'
         state: started
 
     - name: 'Removing old latitude-migrations container'
