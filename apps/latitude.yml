@@ -66,16 +66,18 @@
       set_fact:
         pg_env:
           LAT_NODE_ENV: 'production'
-          LAT_WEB_URL: 'https://{{pgrole}}.{{domain.stdout}}'
-          LAT_API_URL: 'https://{{pgrole}}-api.{{domain.stdout}}'
-          LAT_INGEST_URL: 'https://{{pgrole}}-ingest.{{domain.stdout}}'
-          LAT_TRUSTED_ORIGINS: 'https://{{pgrole}}.{{domain.stdout}}'
-          LAT_CORS_ALLOWED_ORIGINS: 'https://{{pgrole}}.{{domain.stdout}}'
+          # Local URLs prevent cookie/session mismatches when accessing http://localhost:3000 directly.
+          LAT_WEB_URL: 'http://localhost:{{intport}}'
+          LAT_API_URL: 'http://localhost:3001'
+          LAT_INGEST_URL: 'http://localhost:3002'
+          LAT_TRUSTED_ORIGINS: 'http://localhost:{{intport}},https://{{pgrole}}.{{domain.stdout}}'
+          LAT_CORS_ALLOWED_ORIGINS: 'http://localhost:{{intport}},https://{{pgrole}}.{{domain.stdout}}'
           LAT_WEB_PORT: '{{intport}}'
           LAT_DATABASE_URL: 'postgresql://latitude:{{latitude_postgres_password}}@latitude-database:5432/latitude'
           LAT_ADMIN_DATABASE_URL: 'postgresql://postgres:{{latitude_postgres_password}}@latitude-database:5432/postgres'
           LAT_MASTER_ENCRYPTION_KEY: '{{latitude_master_encryption_key}}'
           LAT_BETTER_AUTH_SECRET: '{{latitude_better_auth_secret}}'
+          BETTER_AUTH_SECRET: '{{latitude_better_auth_secret}}'
 
     # MAIN DEPLOYMENT #############################################################
     - name: 'Deploying latitude-database'
