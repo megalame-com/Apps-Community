@@ -80,13 +80,13 @@
       set_fact:
         pg_env:
           LAT_NODE_ENV: 'production'
-          # Local URLs prevent cookie/session mismatches when accessing http://localhost:3000 directly.
-          LAT_WEB_URL: 'http://localhost:{{intport}}'
+          # Use public domain URLs so OAuth callbacks are not generated with localhost.
+          LAT_WEB_URL: 'https://{{pgrole}}.{{domain.stdout}}'
           # In this reduced deployment there is no separate api/ingest container.
-          LAT_API_URL: 'http://localhost:{{intport}}'
-          LAT_INGEST_URL: 'http://localhost:{{intport}}'
-          LAT_TRUSTED_ORIGINS: 'http://localhost:{{intport}}'
-          LAT_CORS_ALLOWED_ORIGINS: 'http://localhost:{{intport}}'
+          LAT_API_URL: 'https://{{pgrole}}.{{domain.stdout}}'
+          LAT_INGEST_URL: 'https://{{pgrole}}.{{domain.stdout}}'
+          LAT_TRUSTED_ORIGINS: 'https://{{pgrole}}.{{domain.stdout}}'
+          LAT_CORS_ALLOWED_ORIGINS: 'https://{{pgrole}}.{{domain.stdout}}'
           LAT_WEB_PORT: '{{intport}}'
           # Keep admin URL on the same DB/user in this reduced deployment to avoid role drift
           # with previously initialized persistent volumes.
