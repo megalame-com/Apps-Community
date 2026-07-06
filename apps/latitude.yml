@@ -16,6 +16,7 @@
         intport: '3000'
         extport: '5973'
         image: 'latitudedata/web:latest'
+        image_db: 'pgvector/pgvector:pg17'
 
     # CORE (MANDATORY) ############################################################
     - name: 'Including cron job'
@@ -39,12 +40,61 @@
           traefik.frontend.headers.customResponseHeaders: 'X-Robots-Tag:noindex,nofollow,nosnippet,noarchive,notranslate,noimageindex'
           traefik.frontend.headers.forceSTSHeader: 'true'
 
+    - name: 'Generating master encryption key'
+      set_fact:
+        latitude_master_encryption_key: "{{ lookup('password', '/opt/appdata/latitude/.lat_master_encryption_key length=64 chars=hex') }}"
+      no_log: true
+
+    - name: 'Generating better-auth secret'
+      set_fact:
+        latitude_better_auth_secret: "{{ lookup('password', '/opt/appdata/latitude/.lat_better_auth_secret length=64 chars=hex') }}"
+      no_log: true
+
+    - name: 'Generating database password'
+      set_fact:
+        latitude_postgres_password: "{{ lookup('password', '/opt/appdata/latitude/.postgres_password length=32 chars=ascii_letters,digits') }}"
+      no_log: true
+
+    - name: 'Setting latitude database ENV'
+      set_fact:
+        latitude_db_env:
+          POSTGRES_USER: 'latitude'
+          POSTGRES_PASSWORD: '{{latitude_postgres_password}}'
+          POSTGRES_DB: 'latitude'
+
     - name: 'Setting {{pgrole}} ENV'
       set_fact:
         pg_env:
+          LAT_NODE_ENV: 'production'
+          LAT_WEB_URL: 'https://{{pgrole}}.{{domain.stdout}}'
+          LAT_API_URL: 'https://{{pgrole}}-api.{{domain.stdout}}'
+          LAT_INGEST_URL: 'https://{{pgrole}}-ingest.{{domain.stdout}}'
+          LAT_TRUSTED_ORIGINS: 'https://{{pgrole}}.{{domain.stdout}}'
+          LAT_CORS_ALLOWED_ORIGINS: 'https://{{pgrole}}.{{domain.stdout}}'
           LAT_WEB_PORT: '{{intport}}'
+          LAT_DATABASE_URL: 'postgresql://latitude:{{latitude_postgres_password}}@latitude-database:5432/latitude'
+          LAT_ADMIN_DATABASE_URL: 'postgresql://postgres:{{latitude_postgres_password}}@latitude-database:5432/postgres'
+          LAT_MASTER_ENCRYPTION_KEY: '{{latitude_master_encryption_key}}'
+          LAT_BETTER_AUTH_SECRET: '{{latitude_better_auth_secret}}'
 
     # MAIN DEPLOYMENT #############################################################
+    - name: 'Deploying latitude-database'
+      docker_container:
+        name: 'latitude-database'
+        image: '{{image_db}}'
+        pull: yes
+        env: '{{latitude_db_env}}'
+        volumes:
+          - '/opt/appdata/latitude/database:/var/lib/postgresql/data'
+          - '/etc/localtime:/etc/localtime:ro'
+        restart_policy: unless-stopped
+        networks:
+          - name: plexguide
+            aliases:
+              - 'latitude-database'
+              - 'postgres'
+        state: started
+
     - name: 'Deploying {{pgrole}}'
       docker_container:
         name: '{{pgrole}}'
