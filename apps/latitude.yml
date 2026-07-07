@@ -187,6 +187,28 @@
             mode: '0755'
             recurse: true
 
+        - name: 'Ensuring latitude clickhouse users config directory'
+          file:
+            path: '/opt/appdata/latitude/clickhouse-users.d'
+            state: directory
+            mode: '0755'
+
+        - name: 'Configuring clickhouse vector similarity setting'
+          copy:
+            dest: '/opt/appdata/latitude/clickhouse-users.d/99-latitude-experimental.xml'
+            mode: '0644'
+            content: |
+              <clickhouse>
+                <profiles>
+                  <default>
+                    <allow_experimental_vector_similarity_index>1</allow_experimental_vector_similarity_index>
+                  </default>
+                  <latitude>
+                    <allow_experimental_vector_similarity_index>1</allow_experimental_vector_similarity_index>
+                  </latitude>
+                </profiles>
+              </clickhouse>
+
         - name: 'Deploying latitude-clickhouse'
           docker_container:
             name: 'latitude-clickhouse'
@@ -195,6 +217,7 @@
             env: '{{latitude_clickhouse_env}}'
             volumes:
               - '/opt/appdata/latitude/clickhouse:/var/lib/clickhouse'
+              - '/opt/appdata/latitude/clickhouse-users.d/99-latitude-experimental.xml:/etc/clickhouse-server/users.d/99-latitude-experimental.xml:ro'
               - '/etc/localtime:/etc/localtime:ro'
             restart_policy: unless-stopped
             networks:
