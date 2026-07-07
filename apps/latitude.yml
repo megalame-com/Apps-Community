@@ -18,7 +18,7 @@
         image: 'latitudedata/web:latest'
         image_migrations: 'latitudedata/migrations:latest'
         image_db: 'pgvector/pgvector:pg17'
-        image_clickhouse: 'clickhouse/clickhouse-server:24.8'
+        image_clickhouse: 'clickhouse/clickhouse-server:24.12'
         image_redis: 'redis:7-alpine'
         image_temporal: 'temporalio/auto-setup:latest'
         image_seaweedfs: 'chrislusf/seaweedfs:latest'
@@ -273,7 +273,7 @@
               - 'migrations'
         state: started
       register: latitude_migration_run
-      retries: 6
+      retries: 2
       delay: 8
       until: latitude_migration_run is succeeded
       ignore_errors: true
