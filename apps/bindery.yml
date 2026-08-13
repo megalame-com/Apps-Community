@@ -13,8 +13,8 @@
     - name: 'Set Known Facts'
       set_fact:
         pgrole: 'bindery'
-        intport: '3000'
-        extport: '3100'
+        intport: '8787'
+        extport: '8787'
         image: 'ghcr.io/vavallee/bindery:latest'
 
     # CORE (MANDATORY) ############################################################
@@ -42,7 +42,10 @@
     - name: 'Setting {{pgrole}} Volumes'
       set_fact:
         pg_volumes:
-          - '/opt/appdata/{{pgrole}}:/data'
+          - '/opt/appdata/{{pgrole}}:/config'
+          - '/mnt/unionfs/abooks:/books'
+          - '/mnt/unionfs/ebooks:/ebooks'
+          - '/mnt/unionfs/downloads:/downloads'
           - '/etc/localtime:/etc/localtime:ro'
 
     - name: 'Setting {{pgrole}} ENV'
@@ -51,7 +54,11 @@
           PUID: '1000'
           PGID: '1000'
           TZ: 'UTC'
-          PORT: '3000'
+          PORT: '8787'
+          BINDERY_LIBRARY_DIR: '/ebooks'
+          BINDERY_AUDIOBOOK_DIR: '/books'
+          BINDERY_DOWNLOAD_DIR: '/downloads'
+          BINDERY_AUDIOBOOK_DOWNLOAD_DIR: '/downloads'
 
     # MAIN DEPLOYMENT #############################################################
     - name: 'Deploying {{pgrole}}'
