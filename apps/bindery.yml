@@ -14,7 +14,7 @@
       set_fact:
         pgrole: 'bindery'
         intport: '3000'
-        extport: '3001'
+        extport: '3100'
         image: 'ghcr.io/vavallee/bindery:latest'
 
     # CORE (MANDATORY) ############################################################
