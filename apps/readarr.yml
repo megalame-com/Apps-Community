@@ -2,7 +2,7 @@
 #
 # Title:      Readarr
 # Author(s):  
-# URL:        https://hub.docker.com/r/hotio/readarr
+# URL:        https://hub.docker.com/r/linuxserver/readarr
 # GNU:        
 ################################################################################
 ---
@@ -15,7 +15,7 @@
         pgrole: 'readarr'
         intport: '8787'
         extport: '8787'
-        image: 'linuxserver/readarr:nightly'
+        image: 'linuxserver/readarr:develop'
 
     # CORE (MANDATORY) ############################################################
     - name: 'Including cron job'
