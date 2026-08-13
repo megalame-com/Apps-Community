@@ -13,8 +13,8 @@
     - name: 'Set Known Facts'
       set_fact:
         pgrole: 'bindery'
-        intport: '8787'
-        extport: '8788'
+        intport: '3000'
+        extport: '3100'
         image: 'ghcr.io/vavallee/bindery:latest'
 
     # CORE (MANDATORY) ############################################################
