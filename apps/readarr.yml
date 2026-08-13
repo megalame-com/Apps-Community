@@ -15,7 +15,7 @@
         pgrole: 'readarr'
         intport: '8787'
         extport: '8787'
-        image: 'lscr.io/linuxserver/readarr:nightly'
+        image: 'lscr.io/linuxserver/readarr:develop'
 
     # CORE (MANDATORY) ############################################################
     - name: 'Including cron job'
