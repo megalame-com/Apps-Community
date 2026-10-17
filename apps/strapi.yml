@@ -1,0 +1,93 @@
+#!/bin/bash
+# Author(s):  MHA-Team
+# GNU:        General Public License v3.0
+################################################################################
+---
+- hosts: localhost
+  gather_facts: false
+  tasks:
+    # FACTS #######################################################################
+    - name: 'Set Known Facts'
+      set_fact:
+        pgrole: 'strapi'
+        intport: '1337'
+        extport: '1337'
+        image: 'node:20-alpine'
+
+    # CORE (MANDATORY) ############################################################
+    - name: 'Including cron job'
+      include_tasks: '/opt/communityapps/apps/_core.yml'
+
+    # LABELS ######################################################################
+    - name: 'Adding Traefik'
+      set_fact:
+        pg_labels:
+          traefik.enable: 'true'
+          traefik.port: '{{intport}}'
+          traefik.frontend.auth.forward.address: '{{gauth}}'
+          traefik.frontend.rule: 'Host:{{pgrole}}.{{domain.stdout}}{{tldset}}{{cname}}'
+          traefik.frontend.headers.SSLHost: '{{domain.stdout}}'
+          traefik.frontend.headers.SSLRedirect: 'true'
+          traefik.frontend.headers.STSIncludeSubdomains: 'true'
+          traefik.frontend.headers.STSPreload: 'true'
+          traefik.frontend.headers.STSSeconds: '315360000'
+          traefik.frontend.headers.browserXSSFilter: 'true'
+          traefik.frontend.headers.contentTypeNosniff: 'true'
+          traefik.frontend.headers.customResponseHeaders: 'X-Robots-Tag:noindex,nofollow,nosnippet,noarchive,notranslate,noimageindex'
+          traefik.frontend.headers.forceSTSHeader: 'true'
+
+    - name: 'Setting {{pgrole}} Volumes'
+      set_fact:
+        pg_volumes:
+          - '/etc/localtime:/etc/localtime:ro'
+          - '/opt/appdata/{{pgrole}}:/opt/app'
+          - '{{path.stdout}}:{{path.stdout}}'
+
+    - name: 'Setting {{pgrole}} ENV'
+      set_fact:
+        pg_env:
+          PUID: '1000'
+          PGID: '1000'
+          TZ: 'Australia/Perth'
+          NODE_ENV: 'production'
+          DATABASE_CLIENT: 'sqlite'
+          DATABASE_FILENAME: '/opt/app/data.db'
+          CI: 'true'
+          STRAPI_DISABLE_UPDATE_NOTIFICATION: 'true'
+          STRAPI_TELEMETRY_DISABLED: 'true'
+          HOST: '0.0.0.0'
+          PORT: '1337'
+
+    # Secrets live outside the repo, generated once per server (root-only)
+    - name: 'Generating {{pgrole}} secrets (first deploy only)'
+      shell: |
+        umask 077
+        {
+          echo "APP_KEYS=$(openssl rand -base64 32),$(openssl rand -base64 32)"
+          for k in API_TOKEN_SALT ADMIN_JWT_SECRET TRANSFER_TOKEN_SALT JWT_SECRET; do
+            echo "$k=$(openssl rand -base64 32)"
+          done
+        } > /var/plexguide/{{pgrole}}.env
+      args:
+        creates: '/var/plexguide/{{pgrole}}.env'
+
+    # MAIN DEPLOYMENT #############################################################
+    - name: 'Deploying {{pgrole}}'
+      docker_container:
+        name: '{{pgrole}}'
+        image: '{{image}}'
+        pull: yes
+        command: sh -c "apk add --no-cache python3 make g++ && if [ ! -f /opt/app/package.json ]; then cd /opt/app && printf 'n\n' | npx -y create-strapi-app@latest . --quickstart --no-run --skip-cloud || true; fi && cd /opt/app && [ -f package.json ] && npm run build && NODE_ENV=production npm start"
+        published_ports:
+          - '{{ports.stdout}}{{extport}}:{{intport}}'
+        volumes: '{{pg_volumes}}'
+        env: '{{pg_env}}'
+        env_file: '/var/plexguide/{{pgrole}}.env'
+        restart_policy: unless-stopped
+        networks:
+          - name: plexguide
+            aliases:
+              - '{{pgrole}}'
+        state: started
+        labels: '{{pg_labels}}'
+##PG-Community
