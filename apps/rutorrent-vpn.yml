@@ -68,6 +68,10 @@
         - '/opt/appdata/{{pgrole}}/data'
         - '/opt/appdata/{{pgrole}}/passwd'
 
+    # Not under /opt/appdata: _core.yml makes that world-readable on every deploy
+    - name: 'Creating {{pgrole}} MyAnonamouse cookie folder (root-only)'
+      file: 'path=/var/plexguide/{{pgrole}}-mam state=directory mode=0700 owner=root group=root'
+
     # PIA hands out a new forwarded port on each connection; gluetun runs this
     # with the port and it moves rTorrent's listener over via XMLRPC. The VPN IP
     # usually changes at the same time, so it also updates MyAnonamouse's
@@ -100,10 +104,29 @@
           set_port
           status=$?
 
+          # MAM sends back a refreshed mam_id cookie, so after the first call the
+          # saved cookie is used instead of the one from the env file
           mam="${MAM_ID:-$mam_id}"
+          jar=/mam/cookies.txt
+          url=https://t.myanonamouse.net/json/dynamicSeedbox.php
+          mam_with_env() {
+            wget -qO- -T 15 --content-on-error --header "Cookie: mam_id=$mam" \
+              --save-cookies "$jar" --keep-session-cookies "$url"
+          }
+          mam_with_jar() {
+            wget -qO- -T 15 --content-on-error --load-cookies "$jar" \
+              --save-cookies "$jar" --keep-session-cookies "$url"
+          }
           if [ -n "$mam" ]; then
-            echo "MyAnonamouse seedbox IP: $(wget -qO- -T 15 --content-on-error \
-              --header "Cookie: mam_id=$mam" https://t.myanonamouse.net/json/dynamicSeedbox.php)"
+            umask 077
+            if grep -q mam_id "$jar" 2>/dev/null; then
+              reply=$(mam_with_jar)
+              # saved cookie gone stale, e.g. a new session was put in the env file
+              case "$reply" in *"Invalid session"*) reply=$(mam_with_env) ;; esac
+            else
+              reply=$(mam_with_env)
+            fi
+            echo "MyAnonamouse seedbox IP: $reply"
           fi
           exit $status
 
@@ -163,6 +186,7 @@
           - '{{ports.stdout}}{{extport}}:{{intport}}'
         volumes:
           - '/opt/appdata/{{pgrole}}/gluetun:/gluetun'
+          - '/var/plexguide/{{pgrole}}-mam:/mam'
         env: '{{pg_env}}'
         env_file: '/var/plexguide/{{pgrole}}.env'
         capabilities:
