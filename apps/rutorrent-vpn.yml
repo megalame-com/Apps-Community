@@ -90,6 +90,8 @@
       set_fact:
         pg_env:
           VPN_SERVICE_PROVIDER: 'private internet access'
+          # the built-in server list goes stale; refresh it from PIA daily
+          UPDATER_PERIOD: '24h'
           TZ: 'Australia/Perth'
 
     - name: 'Setting {{client}} ENV'
