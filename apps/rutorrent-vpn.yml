@@ -69,7 +69,9 @@
         - '/opt/appdata/{{pgrole}}/passwd'
 
     # PIA hands out a new forwarded port on each connection; gluetun runs this
-    # with the port and it moves rTorrent's listener over via XMLRPC
+    # with the port and it moves rTorrent's listener over via XMLRPC. The VPN IP
+    # usually changes at the same time, so it also updates MyAnonamouse's
+    # dynamic seedbox IP when MAM_ID is set in the env file
     - name: 'Installing {{pgrole}} port forwarding hook'
       copy:
         dest: '/opt/appdata/{{pgrole}}/gluetun/port-forward.sh'
@@ -82,17 +84,28 @@
               --post-data "<?xml version=\"1.0\"?><methodCall><methodName>$1</methodName><params><param><value><string></string></value></param><param><value>$2</value></param></params></methodCall>" \
               http://127.0.0.1:8010/RPC2
           }
-          # rTorrent may still be starting, e.g. after a reboot
-          for i in $(seq 1 30); do
-            if rpc network.listen.port.range.set "<string>$port-$port</string>" >/dev/null &&
-              rpc network.listen.port.set "<i8>$port</i8>" >/dev/null; then
-              echo "rTorrent now listening on $port"
-              exit 0
-            fi
-            sleep 5
-          done
-          echo "rTorrent did not answer, port $port not applied"
-          exit 1
+          set_port() {
+            # rTorrent may still be starting, e.g. after a reboot
+            for i in $(seq 1 30); do
+              if rpc network.listen.port.range.set "<string>$port-$port</string>" >/dev/null &&
+                rpc network.listen.port.set "<i8>$port</i8>" >/dev/null; then
+                echo "rTorrent now listening on $port"
+                return 0
+              fi
+              sleep 5
+            done
+            echo "rTorrent did not answer, port $port not applied"
+            return 1
+          }
+          set_port
+          status=$?
+
+          mam="${MAM_ID:-$mam_id}"
+          if [ -n "$mam" ]; then
+            echo "MyAnonamouse seedbox IP: $(wget -qO- -T 15 --content-on-error \
+              --header "Cookie: mam_id=$mam" https://t.myanonamouse.net/json/dynamicSeedbox.php)"
+          fi
+          exit $status
 
     # LABELS ######################################################################
     - name: 'Adding Traefik'
