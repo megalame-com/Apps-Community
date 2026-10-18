@@ -1,0 +1,81 @@
+#!/bin/bash
+# Author(s):  paulbryan
+# GNU:        General Public License v3.0
+################################################################################
+---
+- hosts: localhost
+  gather_facts: false
+  tasks:
+    # FACTS #######################################################################
+    - name: 'Set Known Facts'
+      set_fact:
+        pgrole: 'coder'
+        intport: '7080'
+        extport: '7080'
+        image: 'ghcr.io/coder/coder:v2.37.4'
+
+    # CORE (MANDATORY) ############################################################
+    - name: 'Including cron job'
+      include_tasks: '/opt/communityapps/apps/_core.yml'
+
+    # LABELS ######################################################################
+    # Coder has its own login; agents and the CLI cannot pass Shield, so exempt it
+    # with: touch /var/plexguide/auth/coder (gauth is then empty)
+    - name: 'Adding Traefik'
+      set_fact:
+        pg_labels:
+          traefik.enable: 'true'
+          traefik.port: '{{intport}}'
+          traefik.frontend.auth.forward.address: '{{gauth}}'
+          traefik.frontend.rule: 'Host:{{pgrole}}.{{domain.stdout}}{{tldset}}{{cname}}'
+          traefik.frontend.headers.SSLHost: '{{domain.stdout}}'
+          traefik.frontend.headers.SSLRedirect: 'true'
+          traefik.frontend.headers.STSIncludeSubdomains: 'true'
+          traefik.frontend.headers.STSPreload: 'true'
+          traefik.frontend.headers.STSSeconds: '315360000'
+          traefik.frontend.headers.browserXSSFilter: 'true'
+          traefik.frontend.headers.contentTypeNosniff: 'true'
+          traefik.frontend.headers.customResponseHeaders: 'X-Robots-Tag:noindex,nofollow,nosnippet,noarchive,notranslate,noimageindex'
+          traefik.frontend.headers.forceSTSHeader: 'true'
+
+    # Built-in PostgreSQL and config live under /home/coder/.config (runs as 1000:1000)
+    # docker.sock lets Coder create workspace containers (root-equivalent on host)
+    - name: 'Setting {{pgrole}} Volumes'
+      set_fact:
+        pg_volumes:
+          - '/etc/localtime:/etc/localtime:ro'
+          - '/opt/appdata/{{pgrole}}:/home/coder/.config'
+          - '/var/run/docker.sock:/var/run/docker.sock'
+
+    - name: 'Setting {{pgrole}} ENV'
+      set_fact:
+        pg_env:
+          CODER_HTTP_ADDRESS: '0.0.0.0:{{intport}}'
+          CODER_ACCESS_URL: 'https://{{pgrole}}.{{domain.stdout}}'
+          TZ: 'Australia/Perth'
+
+    # The coder user needs the docker socket's group to reach the socket
+    - name: 'Looking up docker group ID'
+      shell: 'stat -c %g /var/run/docker.sock'
+      register: dockergid
+
+    # MAIN DEPLOYMENT #############################################################
+    - name: 'Deploying {{pgrole}}'
+      docker_container:
+        name: '{{pgrole}}'
+        image: '{{image}}'
+        pull: yes
+        published_ports:
+          - '{{ports.stdout}}{{extport}}:{{intport}}'
+        volumes: '{{pg_volumes}}'
+        env: '{{pg_env}}'
+        groups:
+          - '{{dockergid.stdout}}'
+        restart_policy: unless-stopped
+        networks:
+          - name: plexguide
+            aliases:
+              - '{{pgrole}}'
+        state: started
+        labels: '{{pg_labels}}'
+##PG-Community
