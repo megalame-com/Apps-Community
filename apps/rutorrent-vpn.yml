@@ -21,7 +21,10 @@
         intport: '8080'
         extport: '5897'
         image: 'qmcgaw/gluetun:latest'
-        client_image: 'crazymax/rtorrent-rutorrent:latest'
+        # Pinned: MyAnonamouse only allows whitelisted rTorrent versions
+        # (https://www.myanonamouse.net/tor/allowed_clients.php); check it
+        # before changing this
+        client_image: 'crazymax/rtorrent-rutorrent:5.2.10-0.16.5'
 
     # VPN CREDENTIALS #############################################################
     # Kept outside the repo in a root-only file, filled in by hand once per server
@@ -67,15 +70,28 @@
         - '/opt/appdata/{{pgrole}}/gluetun'
         - '/opt/appdata/{{pgrole}}/data'
         - '/opt/appdata/{{pgrole}}/passwd'
+        - '/opt/appdata/{{pgrole}}/pf'
 
     # Not under /opt/appdata: _core.yml makes that world-readable on every deploy
     - name: 'Creating {{pgrole}} MyAnonamouse cookie folder (root-only)'
       file: 'path=/var/plexguide/{{pgrole}}-mam state=directory mode=0700 owner=root group=root'
 
-    # PIA hands out a new forwarded port on each connection; gluetun runs this
-    # with the port and it moves rTorrent's listener over via XMLRPC. The VPN IP
-    # usually changes at the same time, so it also updates MyAnonamouse's
-    # dynamic seedbox IP when MAM_ID is set in the env file
+    # The whitelisted rTorrent can't change its listening port while running,
+    # so it reads the forwarded port from /pf/rtorrent-port.rc each time it
+    # starts (after the image's default port, so it wins)
+    - name: 'Installing {{client}} forwarded port loader'
+      copy:
+        dest: '/opt/appdata/{{pgrole}}/pf-port-init.sh'
+        mode: '0755'
+        content: |
+          #!/usr/bin/with-contenv sh
+          sed -i '/^network.port_random.set/a try_import = /pf/rtorrent-port.rc' /etc/rtorrent/.rtlocal.rc
+
+    # PIA hands out a forwarded port (kept for about 2 months); gluetun runs
+    # this with the port on each connection. It writes the port for rTorrent and
+    # restarts rTorrent if it's on a different one. The VPN IP usually changes
+    # at the same time, so it also updates MyAnonamouse's dynamic seedbox IP
+    # when MAM_ID is set in the env file
     - name: 'Installing {{pgrole}} port forwarding hook'
       copy:
         dest: '/opt/appdata/{{pgrole}}/gluetun/port-forward.sh'
@@ -84,21 +100,31 @@
           #!/bin/sh
           port="$1"
           rpc() {
-            wget -qO- --header 'Content-Type: text/xml' \
-              --post-data "<?xml version=\"1.0\"?><methodCall><methodName>$1</methodName><params><param><value><string></string></value></param><param><value>$2</value></param></params></methodCall>" \
+            wget -qO- -T 5 --header 'Content-Type: text/xml' \
+              --post-data "<?xml version=\"1.0\"?><methodCall><methodName>$1</methodName><params><param><value><string></string></value></param></params></methodCall>" \
               http://127.0.0.1:8010/RPC2
           }
+          listen_port() {
+            rpc network.listen.port | sed -n 's/.*<i8>\([0-9]*\)<\/i8>.*/\1/p'
+          }
           set_port() {
+            echo "network.port_range.set = $port-$port" > /pf/rtorrent-port.rc
+            restarted=no
             # rTorrent may still be starting, e.g. after a reboot
             for i in $(seq 1 30); do
-              if rpc network.listen.port.range.set "<string>$port-$port</string>" >/dev/null &&
-                rpc network.listen.port.set "<i8>$port</i8>" >/dev/null; then
-                echo "rTorrent now listening on $port"
+              current=$(listen_port)
+              if [ "$current" = "$port" ]; then
+                echo "rTorrent listening on $port"
                 return 0
+              fi
+              if [ -n "$current" ] && [ "$restarted" = no ]; then
+                echo "rTorrent on $current, restarting it to pick up $port"
+                rpc system.shutdown.normal >/dev/null
+                restarted=yes
               fi
               sleep 5
             done
-            echo "rTorrent did not answer, port $port not applied"
+            echo "rTorrent not listening on $port (now: ${current:-not answering})"
             return 1
           }
           set_port
@@ -186,6 +212,7 @@
           - '{{ports.stdout}}{{extport}}:{{intport}}'
         volumes:
           - '/opt/appdata/{{pgrole}}/gluetun:/gluetun'
+          - '/opt/appdata/{{pgrole}}/pf:/pf'
           - '/var/plexguide/{{pgrole}}-mam:/mam'
         env: '{{pg_env}}'
         env_file: '/var/plexguide/{{pgrole}}.env'
@@ -211,6 +238,8 @@
           - '/etc/localtime:/etc/localtime:ro'
           - '/opt/appdata/{{pgrole}}/data:/data'
           - '/opt/appdata/{{pgrole}}/passwd:/passwd'
+          - '/opt/appdata/{{pgrole}}/pf:/pf:ro'
+          - '/opt/appdata/{{pgrole}}/pf-port-init.sh:/etc/cont-init.d/05-pf-port.sh:ro'
           - '{{path.stdout}}/downloads/{{pgrole}}:/downloads'
         env: '{{client_env}}'
         restart_policy: unless-stopped
