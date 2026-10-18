@@ -44,6 +44,8 @@
         pg_volumes:
           - '/etc/localtime:/etc/localtime:ro'
           - '/opt/appdata/{{pgrole}}:/config'
+          # covers, author images and audiobookshelf's own backups
+          - '/opt/appdata/{{pgrole}}/metadata:/metadata'
           - '{{path.stdout}}:{{path.stdout}}'
 
     - name: 'Setting {{pgrole}} ENV'
