@@ -68,6 +68,32 @@
         - '/opt/appdata/{{pgrole}}/data'
         - '/opt/appdata/{{pgrole}}/passwd'
 
+    # PIA hands out a new forwarded port on each connection; gluetun runs this
+    # with the port and it moves rTorrent's listener over via XMLRPC
+    - name: 'Installing {{pgrole}} port forwarding hook'
+      copy:
+        dest: '/opt/appdata/{{pgrole}}/gluetun/port-forward.sh'
+        mode: '0755'
+        content: |
+          #!/bin/sh
+          port="$1"
+          rpc() {
+            wget -qO- --header 'Content-Type: text/xml' \
+              --post-data "<?xml version=\"1.0\"?><methodCall><methodName>$1</methodName><params><param><value><string></string></value></param><param><value>$2</value></param></params></methodCall>" \
+              http://127.0.0.1:8010/RPC2
+          }
+          # rTorrent may still be starting, e.g. after a reboot
+          for i in $(seq 1 30); do
+            if rpc network.listen.port.range.set "<string>$port-$port</string>" >/dev/null &&
+              rpc network.listen.port.set "<i8>$port</i8>" >/dev/null; then
+              echo "rTorrent now listening on $port"
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "rTorrent did not answer, port $port not applied"
+          exit 1
+
     # LABELS ######################################################################
     - name: 'Adding Traefik'
       set_fact:
@@ -92,6 +118,10 @@
           VPN_SERVICE_PROVIDER: 'private internet access'
           # the built-in server list goes stale; refresh it from PIA daily
           UPDATER_PERIOD: '24h'
+          VPN_PORT_FORWARDING: 'on'
+          PORT_FORWARD_ONLY: 'true'
+          # !unsafe: {{PORT}} is gluetun's placeholder, not an Ansible variable
+          VPN_PORT_FORWARDING_UP_COMMAND: !unsafe '/bin/sh /gluetun/port-forward.sh {{PORT}}'
           TZ: 'Australia/Perth'
 
     - name: 'Setting {{client}} ENV'
