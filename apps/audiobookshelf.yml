@@ -17,7 +17,7 @@
         extport: '13378'
         # Pinned: on a moving tag ouroboros applies upgrades (and their database
         # migrations) unattended. Upgrade by editing this after a backup.
-        image: 'ghcr.io/advplyr/audiobookshelf:2.37.1'
+        image: 'ghcr.io/advplyr/audiobookshelf:2.37.2'
 
     # CORE (MANDATORY) ############################################################
     - name: 'Including cron job'
