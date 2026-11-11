@@ -245,5 +245,17 @@
           - '/opt/appdata/{{pgrole}}/pf-port-init.sh:/etc/cont-init.d/05-pf-port.sh:ro'
           - '{{path.stdout}}/downloads/{{pgrole}}:/downloads'
         env: '{{client_env}}'
+        # When {{pgrole}} restarts, {{client}} is left with only a loopback
+        # interface, and the image's own healthcheck still passes over
+        # 127.0.0.1. Fail the check when eth0 is gone so the autoheal container
+        # restarts {{client}}, which rejoins {{pgrole}}'s network.
+        healthcheck:
+          test: ['CMD-SHELL', 'ip link show eth0 >/dev/null 2>&1 && /usr/local/bin/healthcheck']
+          interval: 30s
+          timeout: 20s
+          retries: 3
+          start_period: 1m
+        labels:
+          autoheal: 'true'
         restart_policy: unless-stopped
         state: started
