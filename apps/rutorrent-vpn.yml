@@ -176,6 +176,11 @@
           traefik.frontend.headers.contentTypeNosniff: 'true'
           traefik.frontend.headers.customResponseHeaders: 'X-Robots-Tag:noindex,nofollow,nosnippet,noarchive,notranslate,noimageindex'
           traefik.frontend.headers.forceSTSHeader: 'true'
+          # gluetun can hang with no tunnel after a failed internal VPN restart
+          # (seen 2026-11-17: "stopping" after a ping-restart, then nothing for
+          # 15h). Let the autoheal container restart it; {{client}} then loses
+          # eth0, fails its own check and is restarted by autoheal as well.
+          autoheal: 'true'
 
     - name: 'Setting {{pgrole}} ENV'
       set_fact:
@@ -230,6 +235,15 @@
               - '{{pgrole}}'
         state: started
         labels: '{{pg_labels}}'
+        # The image's own check (every 5s, 3 retries) marks gluetun unhealthy
+        # after ~15s, which its internal VPN restarts can exceed. With autoheal
+        # watching, only restart it after ~3 minutes of sustained failure.
+        healthcheck:
+          test: ['CMD-SHELL', '/gluetun-entrypoint healthcheck']
+          interval: 30s
+          timeout: 10s
+          retries: 6
+          start_period: 2m
 
     - name: 'Deploying {{client}}'
       docker_container:
