@@ -1,0 +1,275 @@
+#!/bin/bash
+#
+# Title:      qBittorrent behind its own Gluetun VPN (kill switch)
+# Author(s):  qdm12 (gluetun), linuxserver.io (qbittorrent)
+# URL:        https://github.com/qdm12/gluetun - https://github.com/linuxserver/docker-qbittorrent
+# GNU:        General Public License v3.0
+################################################################################
+---
+- hosts: localhost
+  gather_facts: false
+  tasks:
+    # FACTS #######################################################################
+
+    # Same layout as rutorrent-vpn, with a separate PIA connection so it gets
+    # its own forwarded port. {{pgrole}} is the gluetun container: it owns the
+    # network, ports and Traefik labels. qBittorrent runs in {{client}} and
+    # shares gluetun's network stack, so its traffic can only leave through the
+    # VPN tunnel.
+    - name: 'Set Known Facts'
+      set_fact:
+        pgrole: 'qbittorrent-vpn'
+        client: 'qbittorrent-vpn-client'
+        intport: '8080'
+        extport: '5898'
+        # Same build as rutorrent-vpn (see the note there on why it's pinned)
+        image: 'qmcgaw/gluetun@sha256:c2ee4191762fca6b6a3c3359a731198a95d9c9af4db32d466e223bf3a84e779b'
+        # Pinned: MyAnonamouse only allows whitelisted client versions
+        # (https://www.myanonamouse.net/tor/allowed_clients.php); check it
+        # before changing this
+        client_image: 'lscr.io/linuxserver/qbittorrent:5.1.4'
+        # Same path inside {{client}} as on the host, so apps that read
+        # qBittorrent's save paths (Spokarr, ReadMeABook) need no path mapping
+        downloads: '{{path.stdout}}/downloads/{{pgrole}}'
+
+    # VPN CREDENTIALS #############################################################
+    # Kept outside the repo in a root-only file, filled in by hand once per server.
+    # MAM_ID must be a MyAnonamouse session of its own: this VPN has a different
+    # IP from rutorrent-vpn, and MAM ties one dynamic seedbox IP to each session.
+    - name: 'Checking for {{pgrole}} VPN credentials'
+      stat:
+        path: '/var/plexguide/{{pgrole}}.env'
+      register: envcheck
+
+    - name: 'Creating {{pgrole}} VPN credentials template'
+      shell: |
+        umask 077
+        cat > /var/plexguide/{{pgrole}}.env <<'EOF'
+        OPENVPN_USER=your-pia-username
+        OPENVPN_PASSWORD=your-pia-password
+        SERVER_REGIONS=AU Perth
+        EOF
+      when: not envcheck.stat.exists
+
+    - name: 'Checking {{pgrole}} VPN credentials are filled in'
+      shell: 'grep -q "your-pia-" /var/plexguide/{{pgrole}}.env'
+      register: envtemplate
+      failed_when: false
+      changed_when: false
+
+    - name: 'Stopping - VPN credentials needed'
+      fail:
+        msg: 'Edit /var/plexguide/{{pgrole}}.env with your PIA username, password and region (and MAM_ID for a second MyAnonamouse session), then deploy again.'
+      when: envtemplate.rc == 0
+
+    # CORE (MANDATORY) ############################################################
+    - name: 'Including cron job'
+      include_tasks: '/opt/communityapps/apps/_core.yml'
+
+    - name: 'Including plugins'
+      include_tasks: '/opt/communityapps/apps/_plugins.yml'
+
+    - name: 'Including folders'
+      include_tasks: '/opt/communityapps/apps/_downloaders.yml'
+
+    - name: 'Creating {{pgrole}} folders'
+      file: 'path={{item}} state=directory mode=0775 owner=1000 group=1000'
+      with_items:
+        - '/opt/appdata/{{pgrole}}/gluetun'
+        - '/opt/appdata/{{pgrole}}/config/qBittorrent'
+        - '{{downloads}}'
+
+    # Not under /opt/appdata: _core.yml makes that world-readable on every deploy
+    - name: 'Creating {{pgrole}} MyAnonamouse cookie folder (root-only)'
+      file: 'path=/var/plexguide/{{pgrole}}-mam state=directory mode=0700 owner=root group=root'
+
+    # PIA hands out a forwarded port (kept for about 2 months); gluetun runs
+    # this with the port on each connection. qBittorrent can change its port
+    # while running, so the hook sets it over the WebUI API (localhost needs no
+    # login, see below). The VPN IP usually changes at the same time, so it
+    # also updates MyAnonamouse's dynamic seedbox IP when MAM_ID is set in the
+    # env file
+    - name: 'Installing {{pgrole}} port forwarding hook'
+      copy:
+        dest: '/opt/appdata/{{pgrole}}/gluetun/port-forward.sh'
+        mode: '0755'
+        content: |
+          #!/bin/sh
+          port="$1"
+          api=http://127.0.0.1:{{intport}}/api/v2/app
+          listen_port() {
+            wget -qO- -T 5 "$api/preferences" | sed -n 's/.*"listen_port":\([0-9]*\).*/\1/p'
+          }
+          set_port() {
+            # qBittorrent may still be starting, e.g. after a reboot or a deploy
+            for i in $(seq 1 30); do
+              current=$(listen_port)
+              if [ "$current" = "$port" ]; then
+                echo "qBittorrent listening on $port"
+                return 0
+              fi
+              if [ -n "$current" ]; then
+                wget -qO- -T 5 --post-data "json={\"listen_port\":$port,\"random_port\":false,\"upnp\":false}" \
+                  "$api/setPreferences" >/dev/null
+              fi
+              sleep 5
+            done
+            echo "qBittorrent not listening on $port (now: ${current:-not answering})"
+            return 1
+          }
+          set_port
+          status=$?
+
+          # MAM sends back a refreshed mam_id cookie, so after the first call the
+          # saved cookie is used instead of the one from the env file
+          mam="${MAM_ID:-$mam_id}"
+          jar=/mam/cookies.txt
+          url=https://t.myanonamouse.net/json/dynamicSeedbox.php
+          mam_with_env() {
+            wget -qO- -T 15 --content-on-error --header "Cookie: mam_id=$mam" \
+              --save-cookies "$jar" --keep-session-cookies "$url"
+          }
+          mam_with_jar() {
+            wget -qO- -T 15 --content-on-error --load-cookies "$jar" \
+              --save-cookies "$jar" --keep-session-cookies "$url"
+          }
+          if [ -n "$mam" ]; then
+            umask 077
+            if grep -q mam_id "$jar" 2>/dev/null; then
+              reply=$(mam_with_jar)
+              # saved cookie gone stale, e.g. a new session was put in the env file
+              case "$reply" in *"Invalid session"*) reply=$(mam_with_env) ;; esac
+            else
+              reply=$(mam_with_env)
+            fi
+            echo "MyAnonamouse seedbox IP: $reply"
+          fi
+          exit $status
+
+    # LABELS ######################################################################
+    - name: 'Adding Traefik'
+      set_fact:
+        pg_labels:
+          traefik.enable: 'true'
+          traefik.port: '{{intport}}'
+          traefik.frontend.auth.forward.address: '{{gauth}}'
+          traefik.frontend.rule: 'Host:{{pgrole}}.{{domain.stdout}}{{tldset}}{{cname}}'
+          traefik.frontend.headers.SSLHost: '{{domain.stdout}}'
+          traefik.frontend.headers.SSLRedirect: 'true'
+          traefik.frontend.headers.STSIncludeSubdomains: 'true'
+          traefik.frontend.headers.STSPreload: 'true'
+          traefik.frontend.headers.STSSeconds: '315360000'
+          traefik.frontend.headers.browserXSSFilter: 'true'
+          traefik.frontend.headers.contentTypeNosniff: 'true'
+          traefik.frontend.headers.customResponseHeaders: 'X-Robots-Tag:noindex,nofollow,nosnippet,noarchive,notranslate,noimageindex'
+          traefik.frontend.headers.forceSTSHeader: 'true'
+          # Let the autoheal container restart a hung gluetun; {{client}} then
+          # loses eth0, fails its own check and is restarted as well
+          autoheal: 'true'
+
+    - name: 'Setting {{pgrole}} ENV'
+      set_fact:
+        pg_env:
+          VPN_SERVICE_PROVIDER: 'private internet access'
+          # the built-in server list goes stale; refresh it from PIA daily
+          UPDATER_PERIOD: '24h'
+          VPN_PORT_FORWARDING: 'on'
+          PORT_FORWARD_ONLY: 'true'
+          # !unsafe: {{PORT}} is gluetun's placeholder, not an Ansible variable
+          VPN_PORT_FORWARDING_UP_COMMAND: !unsafe '/bin/sh /gluetun/port-forward.sh {{PORT}}'
+          TZ: 'Australia/Perth'
+
+    - name: 'Setting {{client}} ENV'
+      set_fact:
+        client_env:
+          PUID: '1000'
+          PGID: '1000'
+          TZ: 'Australia/Perth'
+          WEBUI_PORT: '{{intport}}'
+
+    # MAIN DEPLOYMENT #############################################################
+    # {{client}} goes first: qBittorrent rewrites its config when it stops, so
+    # the settings below are only written while it isn't running
+    - name: 'Removing {{client}}'
+      docker_container:
+        name: '{{client}}'
+        state: absent
+      ignore_errors: True
+
+    # Only the settings this setup depends on; everything else stays as set in
+    # the web UI. Localhost skips the WebUI login so the port hook (same
+    # network stack) can use the API; Traefik's requests come from another
+    # address and still need the login.
+    - name: 'Setting {{client}} required preferences'
+      ini_file:
+        path: '/opt/appdata/{{pgrole}}/config/qBittorrent/qBittorrent.conf'
+        section: '{{item.section}}'
+        option: '{{item.option}}'
+        value: '{{item.value}}'
+        no_extra_spaces: yes
+        owner: '1000'
+        group: '1000'
+        mode: '0664'
+      with_items:
+        - { section: 'Preferences', option: 'WebUI\LocalHostAuth', value: 'false' }
+        - { section: 'BitTorrent', option: 'Session\DefaultSavePath', value: '{{downloads}}' }
+        - { section: 'BitTorrent', option: 'Session\TempPathEnabled', value: 'false' }
+        - { section: 'BitTorrent', option: 'Session\UseRandomPort', value: 'false' }
+        - { section: 'Preferences', option: 'Connection\UPnP', value: 'false' }
+
+    - name: 'Deploying {{pgrole}}'
+      docker_container:
+        name: '{{pgrole}}'
+        image: '{{image}}'
+        pull: yes
+        published_ports:
+          - '{{ports.stdout}}{{extport}}:{{intport}}'
+        volumes:
+          - '/opt/appdata/{{pgrole}}/gluetun:/gluetun'
+          - '/var/plexguide/{{pgrole}}-mam:/mam'
+        env: '{{pg_env}}'
+        env_file: '/var/plexguide/{{pgrole}}.env'
+        capabilities:
+          - NET_ADMIN
+        devices:
+          - '/dev/net/tun:/dev/net/tun'
+        restart_policy: unless-stopped
+        networks:
+          - name: plexguide
+            aliases:
+              - '{{pgrole}}'
+        state: started
+        labels: '{{pg_labels}}'
+        # Same as rutorrent-vpn: only restart after ~3 minutes of sustained
+        # failure, not on the short gaps of gluetun's own VPN restarts
+        healthcheck:
+          test: ['CMD-SHELL', '/gluetun-entrypoint healthcheck']
+          interval: 30s
+          timeout: 10s
+          retries: 6
+          start_period: 2m
+
+    - name: 'Deploying {{client}}'
+      docker_container:
+        name: '{{client}}'
+        image: '{{client_image}}'
+        pull: yes
+        network_mode: 'container:{{pgrole}}'
+        volumes:
+          - '/opt/appdata/{{pgrole}}/config:/config'
+          - '{{downloads}}:{{downloads}}'
+        env: '{{client_env}}'
+        # When {{pgrole}} restarts, {{client}} is left with only a loopback
+        # interface and qBittorrent still answers over 127.0.0.1. Fail the
+        # check when eth0 is gone so the autoheal container restarts
+        # {{client}}, which rejoins {{pgrole}}'s network.
+        healthcheck:
+          test: ['CMD-SHELL', 'ip link show eth0 >/dev/null 2>&1 && curl -fsS -o /dev/null http://127.0.0.1:{{intport}}/api/v2/app/version']
+          interval: 30s
+          timeout: 20s
+          retries: 3
+          start_period: 1m
+        labels:
+          autoheal: 'true'
+        restart_policy: unless-stopped
+        state: started
