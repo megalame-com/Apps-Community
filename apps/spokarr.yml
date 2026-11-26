@@ -17,7 +17,7 @@
         extport: '5057'
         # Pinned: a young project (first release 2026-11-24) that ships several
         # releases a day. Upgrade by editing this.
-        image: 'ghcr.io/blugdeg/spokarr:0.5.1'
+        image: 'ghcr.io/blugdeg/spokarr:0.10.0'
 
     # CORE (MANDATORY) ############################################################
     - name: 'Including cron job'
